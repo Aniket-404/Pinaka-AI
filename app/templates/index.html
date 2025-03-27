@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Pinaka AI - Object Detection{% endblock %}
+
+{% block head %}
+<style>
+    #notifications-panel {
+        max-height: 450px;
+        overflow-y: auto;
+    }
+    .notification-card {
+        transition: all 0.3s ease;
+    }
+    .notification-card.new {
+        background-color: #f8f9fa;
+        animation: highlight 2s ease;
+    }
+    @keyframes highlight {
+        0% { background-color: #d4edda; }
+        100% { background-color: #f8f9fa; }
+    }
+    .notification-image {
+        max-width: 100%;
+        max-height: 150px;
+        object-fit: contain;
+    }
+    /* Center content on smaller screens */
+    @media (max-width: 768px) {
+        .video-container {
+            max-width: 450px;
+            height: 340px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 text-center mb-3">
+        <h2>Pinaka AI Object Detection</h2>
+        <p class="lead">Real-time object detection with browser notifications</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-7">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">Live Detection Feed</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="video-container">
+                    <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Live detection feed">
+                </div>
+            </div>
+            <div class="card-footer text-center">
+                <p class="text-muted mb-0">Monitoring for objects. Configure in <a href="{{ url_for('settings') }}">Settings</a>.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Detection Notifications</h5>
+                <button id="clear-notifications" class="btn btn-sm btn-light">Clear All</button>
+            </div>
+            <div id="notifications-panel" class="card-body p-0">
+                <div id="no-notifications" class="p-3 text-center">
+                    <p class="text-muted">No detections yet. Waiting for objects...</p>
+                </div>
+                <div id="notifications-container">
+                    <!-- Notifications will be added here by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="card-title mb-0">How It Works</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <ol>
+                            <li>The system uses YOLO for real-time object detection through your webcam.</li>
+                            <li>When an object is detected with confidence above your threshold, you receive a real-time notification.</li>
+                            <li>You can customize which objects to monitor and the confidence threshold in Settings.</li>
+                            <li>Notifications include a snapshot of the detected object for verification.</li>
+                        </ol>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="alert alert-info">
+                            <strong>Note:</strong> Please allow notification permissions in your browser for the best experience.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Request notification permission
+        if ('Notification' in window) {
+            Notification.requestPermission();
+        }
+        
+        // Connect to Socket.IO server
+        const socket = io();
+        
+        // Handle detection alerts
+        socket.on('detection_alert', function(data) {
+            // Create browser notification if permission granted
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification('Object Detected: ' + data.object, {
+                    body: `Confidence: ${(data.confidence * 100).toFixed(1)}% at ${data.time}`,
+                    icon: 'data:image/jpeg;base64,' + data.image
+                });
+                
+                // Auto close after 5 seconds
+                setTimeout(() => notification.close(), 5000);
+            }
+            
+            // Add to notifications panel
+            addNotificationToPanel(data);
+        });
+        
+        // Clear all notifications button
+        document.getElementById('clear-notifications').addEventListener('click', function() {
+            document.getElementById('notifications-container').innerHTML = '';
+            document.getElementById('no-notifications').style.display = 'block';
+        });
+        
+        // Function to add a notification to the panel
+        function addNotificationToPanel(data) {
+            const notificationsContainer = document.getElementById('notifications-container');
+            const noNotifications = document.getElementById('no-notifications');
+            
+            // Hide the "no notifications" message
+            noNotifications.style.display = 'none';
+            
+            // Create notification card
+            const card = document.createElement('div');
+            card.className = 'notification-card new border-bottom p-2';
+            card.innerHTML = `
+                <div class="d-flex justify-content-between">
+                    <strong>${data.object}</strong>
+                    <small class="text-muted">${data.time}</small>
+                </div>
+                <div class="text-center my-2">
+                    <img src="data:image/jpeg;base64,${data.image}" class="notification-image" alt="${data.object}">
+                </div>
+                <div class="text-center">
+                    <span class="badge bg-primary">Confidence: ${(data.confidence * 100).toFixed(1)}%</span>
+                </div>
+            `;
+            
+            // Add to the container at the top
+            notificationsContainer.prepend(card);
+            
+            // Remove the "new" class after animation completes
+            setTimeout(() => {
+                card.classList.remove('new');
+            }, 2000);
+            
+            // Limit the number of notifications to 50
+            const cards = notificationsContainer.querySelectorAll('.notification-card');
+            if (cards.length > 50) {
+                for (let i = 50; i < cards.length; i++) {
+                    cards[i].remove();
+                }
+            }
+        }
+    });
+</script>
+{% endblock %} 
