@@ -131,14 +131,3 @@ python app.py
 ## 📝 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 🙏 Acknowledgments
-
-- YOLOv8 by Ultralytics
-- Flask web framework
-- OpenCV for image processing
-- DroidCam for mobile camera support
