@@ -144,5 +144,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - DroidCam for mobile camera support
 
 ---
-
-Made with ❤️ by [Your Name/Organization] 
