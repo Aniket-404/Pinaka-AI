@@ -4,70 +4,225 @@
 
 {% block head %}
 <style>
-    #notifications-panel {
-        max-height: 450px;
-        overflow-y: auto;
+    .hero-section {
+        text-align: center;
+        margin-bottom: 3rem;
     }
+
+    .hero-section h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+    }
+
+    .hero-section p {
+        font-size: 1.1rem;
+        color: var(--text-secondary);
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .video-section {
+        margin-bottom: 2rem;
+    }
+
+    .video-container {
+        position: relative;
+    }
+
+    .video-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(transparent, rgba(0,0,0,0.7));
+        padding: 1.5rem;
+        color: white;
+    }
+
+    .notifications-section {
+        height: 500px;
+        overflow-y: auto;
+        padding-right: 0.5rem;
+    }
+
+    .notifications-section::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .notifications-section::-webkit-scrollbar-track {
+        background: var(--border-color);
+        border-radius: 3px;
+    }
+
+    .notifications-section::-webkit-scrollbar-thumb {
+        background: var(--primary-color);
+        border-radius: 3px;
+    }
+
     .notification-card {
+        background-color: var(--card-background);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
         transition: all 0.3s ease;
     }
+
     .notification-card.new {
-        background-color: #f8f9fa;
-        animation: highlight 2s ease;
+        background-color: #f0f9ff;
+        border-left: 4px solid var(--primary-color);
     }
-    @keyframes highlight {
-        0% { background-color: #d4edda; }
-        100% { background-color: #f8f9fa; }
+
+    .notification-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
     }
+
+    .notification-title {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .notification-time {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
     .notification-image {
-        max-width: 100%;
-        max-height: 150px;
-        object-fit: contain;
+        width: 100%;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 6px;
+        margin: 0.5rem 0;
     }
-    /* Center content on smaller screens */
-    @media (max-width: 768px) {
-        .video-container {
-            max-width: 450px;
-            height: 340px;
-        }
+
+    .notification-confidence {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        background-color: #e0f2fe;
+        color: var(--primary-color);
+        border-radius: 4px;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .clear-notifications {
+        position: sticky;
+        top: 0;
+        background-color: var(--card-background);
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        z-index: 1;
+    }
+
+    .no-notifications {
+        text-align: center;
+        padding: 2rem;
+        color: var(--text-secondary);
+    }
+
+    .no-notifications i {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+        color: var(--border-color);
+    }
+
+    @keyframes highlight {
+        0% { background-color: #f0f9ff; }
+        100% { background-color: var(--card-background); }
+    }
+
+    .instructions-section {
+        margin-top: 4rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .instruction-card {
+        background-color: var(--card-background);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1.5rem;
+        height: 100%;
+        transition: all 0.3s ease;
+    }
+
+    .instruction-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    }
+
+    .instruction-icon {
+        font-size: 1.5rem;
+        color: var(--primary-color);
+        margin-bottom: 1rem;
+    }
+
+    .instruction-title {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--text-primary);
+    }
+
+    .instruction-text {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .note-box {
+        background-color: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 2rem;
+    }
+
+    .note-box h5 {
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+    }
+
+    .note-box p {
+        color: var(--text-secondary);
+        margin-bottom: 0;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12 text-center mb-3">
-        <h2>Pinaka AI Object Detection</h2>
-        <p class="lead">Real-time object detection with browser notifications</p>
-    </div>
+<div class="hero-section">
+    <h1>Real-time Object Detection</h1>
+    <p>Monitor your surroundings with AI-powered object detection and instant notifications</p>
 </div>
 
 <div class="row">
-    <div class="col-md-7">
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">Live Detection Feed</h5>
-            </div>
-            <div class="card-body p-0">
-                <div class="video-container">
-                    <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Live detection feed">
+    <div class="col-lg-8">
+        <div class="video-section">
+            <div class="video-container">
+                <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Live detection feed">
+                <div class="video-overlay">
+                    <h5 class="mb-0">Live Detection Feed</h5>
+                    <small>Monitoring for objects in real-time</small>
                 </div>
-            </div>
-            <div class="card-footer text-center">
-                <p class="text-muted mb-0">Monitoring for objects. Configure in <a href="{{ url_for('settings') }}">Settings</a>.</p>
             </div>
         </div>
     </div>
     
-    <div class="col-md-5">
+    <div class="col-lg-4">
         <div class="card">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">Detection Notifications</h5>
-                <button id="clear-notifications" class="btn btn-sm btn-light">Clear All</button>
+            <div class="clear-notifications d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Detection Notifications</h5>
+                <button id="clear-notifications" class="btn btn-sm btn-outline-primary">Clear All</button>
             </div>
-            <div id="notifications-panel" class="card-body p-0">
-                <div id="no-notifications" class="p-3 text-center">
-                    <p class="text-muted">No detections yet. Waiting for objects...</p>
+            <div class="notifications-section">
+                <div id="no-notifications" class="no-notifications">
+                    <i class="bi bi-bell"></i>
+                    <p>No detections yet. Waiting for objects...</p>
                 </div>
                 <div id="notifications-container">
                     <!-- Notifications will be added here by JavaScript -->
@@ -77,30 +232,49 @@
     </div>
 </div>
 
-<div class="row mt-3">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header bg-dark text-white">
-                <h5 class="card-title mb-0">How It Works</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        <ol>
-                            <li>The system uses YOLO for real-time object detection through your webcam.</li>
-                            <li>When an object is detected with confidence above your threshold, you receive a real-time notification.</li>
-                            <li>You can customize which objects to monitor and the confidence threshold in Settings.</li>
-                            <li>Notifications include a snapshot of the detected object for verification.</li>
-                        </ol>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="alert alert-info">
-                            <strong>Note:</strong> Please allow notification permissions in your browser for the best experience.
-                        </div>
-                    </div>
-                </div>
+<div class="instructions-section">
+    <h3 class="text-center mb-4">How It Works</h3>
+    
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="instruction-card">
+                <div class="instruction-icon">📷</div>
+                <h5 class="instruction-title">Camera Setup</h5>
+                <p class="instruction-text">
+                    Connect your camera (built-in webcam or mobile camera) and ensure it has a clear view of the area you want to monitor. The system will automatically detect and use the available camera.
+                </p>
             </div>
         </div>
+        
+        <div class="col-md-4">
+            <div class="instruction-card">
+                <div class="instruction-icon">🔍</div>
+                <h5 class="instruction-title">Object Detection</h5>
+                <p class="instruction-text">
+                    The system uses advanced AI to detect objects in real-time. You can customize which objects to monitor in the Settings page, such as people, vehicles, or specific items.
+                </p>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="instruction-card">
+                <div class="instruction-icon">🔔</div>
+                <h5 class="instruction-title">Notifications</h5>
+                <p class="instruction-text">
+                    When an object is detected, you'll receive instant notifications in your browser and see the detection details in the notifications panel. Each notification includes a snapshot of the detected object.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="note-box">
+        <h5>Important Notes</h5>
+        <p>
+            • Make sure to allow browser notifications for the best experience<br>
+            • Adjust the confidence threshold in Settings to reduce false positives<br>
+            • Keep your camera stable for better detection accuracy<br>
+            • The system works best in well-lit environments
+        </p>
     </div>
 </div>
 {% endblock %}
@@ -150,17 +324,15 @@
             
             // Create notification card
             const card = document.createElement('div');
-            card.className = 'notification-card new border-bottom p-2';
+            card.className = 'notification-card new';
             card.innerHTML = `
-                <div class="d-flex justify-content-between">
-                    <strong>${data.object}</strong>
-                    <small class="text-muted">${data.time}</small>
+                <div class="notification-header">
+                    <span class="notification-title">${data.object}</span>
+                    <span class="notification-time">${data.time}</span>
                 </div>
-                <div class="text-center my-2">
-                    <img src="data:image/jpeg;base64,${data.image}" class="notification-image" alt="${data.object}">
-                </div>
-                <div class="text-center">
-                    <span class="badge bg-primary">Confidence: ${(data.confidence * 100).toFixed(1)}%</span>
+                <img src="data:image/jpeg;base64,${data.image}" class="notification-image" alt="${data.object}">
+                <div class="text-end">
+                    <span class="notification-confidence">${(data.confidence * 100).toFixed(1)}% confidence</span>
                 </div>
             `;
             

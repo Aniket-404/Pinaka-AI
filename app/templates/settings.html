@@ -4,90 +4,158 @@
 
 {% block head %}
 <style>
-    .class-tag {
-        display: inline-block;
-        margin: 0.25rem;
-        padding: 0.3rem 0.6rem;
-        background-color: #f0f0f0;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: all 0.2s;
+    .settings-section {
+        max-width: 800px;
+        margin: 0 auto;
     }
-    .class-tag:hover {
-        background-color: #e0e0e0;
+
+    .form-label {
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
     }
-    .class-tag.selected {
-        background-color: #0d6efd;
-        color: white;
+
+    .form-control {
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
     }
+
+    .form-control:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .form-text {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+    }
+
     .classes-container {
-        max-height: 200px;
-        overflow-y: auto;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        padding: 0.5rem;
-        margin-bottom: 1rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .class-tag {
+        padding: 0.5rem 1rem;
+        background-color: var(--card-background);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .class-tag:hover {
+        background-color: #f0f9ff;
+        border-color: var(--primary-color);
+    }
+
+    .class-tag.selected {
+        background-color: #e0f2fe;
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+
+    .slider-container {
+        padding: 1rem 0;
+    }
+
+    .slider-value {
+        font-weight: 500;
+        color: var(--primary-color);
+    }
+
+    input[type="range"] {
+        -webkit-appearance: none;
+        width: 100%;
+        height: 6px;
+        background: var(--border-color);
+        border-radius: 3px;
+        outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 20px;
+        height: 20px;
+        background: var(--primary-color);
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+        transform: scale(1.1);
+    }
+
+    .btn-submit {
+        width: 100%;
+        padding: 0.75rem;
+        font-weight: 500;
+        margin-top: 1.5rem;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-8 offset-md-2">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">Detection Settings</h5>
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('settings') }}">
-                    {{ form.hidden_tag() }}
-                    
-                    <div class="mb-3">
-                        <label for="monitored_objects" class="form-label">{{ form.monitored_objects.label }}</label>
-                        {{ form.monitored_objects(class="form-control", placeholder="person,car,dog", id="monitored_objects_input") }}
-                        {% if form.monitored_objects.errors %}
-                            <div class="text-danger">
-                                {% for error in form.monitored_objects.errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                        <div class="form-text">Comma-separated list of object classes to monitor.</div>
-                        
-                        {% if available_classes %}
-                            <div class="mt-3">
-                                <label class="form-label">Available Object Classes</label>
-                                <p class="small text-muted">Click on classes to add/remove them from monitoring:</p>
-                                <div class="classes-container">
-                                    {% for class_name in available_classes|sort %}
-                                        <span class="class-tag" data-class="{{ class_name }}">{{ class_name }}</span>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="confidence_threshold" class="form-label">{{ form.confidence_threshold.label }}</label>
-                        {{ form.confidence_threshold(class="form-control", type="range", min="0.1", max="1.0", step="0.05") }}
-                        <div class="text-center">
-                            <span id="confidence-value">0.7</span>
+<div class="settings-section">
+    <div class="card">
+        <div class="card-header">
+            <h4 class="mb-0">Detection Settings</h4>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('settings') }}">
+                {{ form.hidden_tag() }}
+                
+                <div class="mb-4">
+                    <label for="monitored_objects" class="form-label">{{ form.monitored_objects.label }}</label>
+                    {{ form.monitored_objects(class="form-control", placeholder="person,car,dog", id="monitored_objects_input") }}
+                    {% if form.monitored_objects.errors %}
+                        <div class="text-danger mt-1">
+                            {% for error in form.monitored_objects.errors %}
+                                {{ error }}
+                            {% endfor %}
                         </div>
-                        {% if form.confidence_threshold.errors %}
-                            <div class="text-danger">
-                                {% for error in form.confidence_threshold.errors %}
-                                    {{ error }}
+                    {% endif %}
+                    <div class="form-text">Enter comma-separated list of object classes to monitor</div>
+                    
+                    {% if available_classes %}
+                        <div class="mt-3">
+                            <label class="form-label">Available Object Classes</label>
+                            <p class="form-text">Click on classes to add/remove them from monitoring:</p>
+                            <div class="classes-container">
+                                {% for class_name in available_classes|sort %}
+                                    <span class="class-tag" data-class="{{ class_name }}">{{ class_name }}</span>
                                 {% endfor %}
                             </div>
-                        {% endif %}
-                        <div class="form-text">Minimum confidence level (0.1-1.0) required to trigger a notification. Higher values reduce false positives.</div>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div class="mb-4">
+                    <label for="confidence_threshold" class="form-label">{{ form.confidence_threshold.label }}</label>
+                    <div class="slider-container">
+                        {{ form.confidence_threshold(class="form-control", type="range", min="0.1", max="1.0", step="0.05") }}
+                        <div class="text-center mt-2">
+                            <span class="slider-value" id="confidence-value">0.7</span>
+                        </div>
                     </div>
-                    
-                    <div class="d-grid gap-2">
-                        {{ form.submit(class="btn btn-primary") }}
-                    </div>
-                </form>
-            </div>
+                    {% if form.confidence_threshold.errors %}
+                        <div class="text-danger mt-1">
+                            {% for error in form.confidence_threshold.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="form-text">Minimum confidence level (0.1-1.0) required to trigger a notification</div>
+                </div>
+                
+                {{ form.submit(class="btn btn-primary btn-submit") }}
+            </form>
         </div>
     </div>
 </div>
@@ -135,24 +203,18 @@
         classTags.forEach(tag => {
             tag.addEventListener('click', function() {
                 const className = this.dataset.class;
-                let currentClasses = monitoredInput.value.split(',').map(c => c.trim()).filter(c => c);
+                let selectedClasses = monitoredInput.value.split(',').map(c => c.trim()).filter(c => c);
                 
-                if (currentClasses.includes(className)) {
-                    // Remove class if already selected
-                    currentClasses = currentClasses.filter(c => c !== className);
+                if (selectedClasses.includes(className)) {
+                    selectedClasses = selectedClasses.filter(c => c !== className);
                 } else {
-                    // Add class if not already selected
-                    currentClasses.push(className);
+                    selectedClasses.push(className);
                 }
                 
-                // Update input field
-                monitoredInput.value = currentClasses.join(',');
+                monitoredInput.value = selectedClasses.join(', ');
                 updateSelectedTags();
             });
         });
-        
-        // Update selected tags when input changes
-        monitoredInput.addEventListener('input', updateSelectedTags);
     });
 </script>
 {% endblock %} 
