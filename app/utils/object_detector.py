@@ -51,9 +51,16 @@ class ObjectDetector:
     def _ensure_camera_open(self):
         """Ensure the camera is open, attempt to reopen if closed"""
         if self.cap is None or not self.cap.isOpened():
-            self.cap = cv2.VideoCapture(self.camera_id)
+            # Try DroidCam first (usually device 1 or 2)
+            for device_id in [1, 2, 0]:  # Try DroidCam devices first, then fallback to default
+                self.cap = cv2.VideoCapture(device_id)
+                if self.cap.isOpened():
+                    print(f"Successfully opened camera device {device_id}")
+                    break
+                self.cap.release()
+            
             if not self.cap.isOpened():
-                raise RuntimeError(f"Could not open camera with ID {self.camera_id}")
+                raise RuntimeError(f"Could not open any camera device. Please ensure DroidCam is running and connected.")
             time.sleep(1)  # Give camera time to initialize
     
     def _process_frame(self, frame, config):
