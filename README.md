@@ -142,5 +142,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - Flask web framework
 - OpenCV for image processing
 - DroidCam for mobile camera support
-
----
