@@ -1,0 +1,15 @@
+# Custom YOLO Dataset Configuration
+# Dataset root directory (absolute path)
+path: C:\Users\kambl\Desktop\Aniket\Degree\Main\BE\Final Year Project\Pinaka-AI
+
+# Training and validation sets (relative to path)
+train: custom_dataset/images/train
+val: custom_dataset/images/val
+
+# Number of classes
+nc: 2
+
+# Class names
+names:
+  0: stone
+  1: gas_cylinder

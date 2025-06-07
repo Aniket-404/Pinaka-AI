@@ -1,0 +1,29 @@
+# YOLO Custom Training Configuration
+# Classes: stone, gas_cylinder
+# Training dataset: 1,120 images
+# Validation dataset: 189 images
+
+# Dataset paths (absolute path)
+path: C:\Users\kambl\Desktop\Aniket\Degree\Main\BE\Final Year Project\Pinaka-AI
+train: custom_dataset/images/train
+val: custom_dataset/images/val
+
+# Number of classes
+nc: 2
+
+# Class names
+names:
+  0: stone
+  1: gas_cylinder
+
+# Training configuration (auto-detects GPU/CPU)
+epochs: 100  # Optimal for custom object detection (GPU) / 60 (CPU)
+imgsz: 640
+batch: 16  # Will be adjusted based on available device  
+patience: 15  # Increased for better convergence
+device: auto  # Auto-detect GPU/CPU - set to 'cuda' to force GPU, 'cpu' to force CPU
+
+# Model configuration
+model: yolov8n.pt  # Base model to start from
+project: training/runs  # Where to save training results
+name: custom_yolo  # Experiment name
