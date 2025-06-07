@@ -5,6 +5,7 @@ from app.forms import NotificationForm
 from app.utils.object_detector import ObjectDetector
 from app.utils.config import Config
 from dotenv import load_dotenv
+import cv2
 
 # Load environment variables
 load_dotenv()
@@ -16,32 +17,45 @@ app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')
 socketio = SocketIO(app)
 
-# Try to download the YOLOv8n model if it doesn't exist
-model_path = "custom_yolo_100epochs_best.pt"
-if not os.path.exists(model_path):
-    try:
-        import urllib.request
-        print(f"Manually downloading {model_path}...")
-        url = "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"
-        urllib.request.urlretrieve(url, model_path)
-        print(f"Successfully downloaded {model_path}")
-    except Exception as e:
-        print(f"Failed to download model: {e}")
+# Load both models
+custom_model_path = "models/custom_yolo_100epochs_best.pt"
+coco_model_path = "models/yolov8n.pt"
 
-# Initialize the object detector with the standard YOLOv8n model
+custom_detector = None
+coco_detector = None
+
 try:
-    print(f"Attempting to load model: {model_path}")
-    object_detector = ObjectDetector(model_path=model_path, socketio=socketio)
-    if not object_detector.model_loaded:
-        print("Standard model failed to load. Using fallback detection.")
-        object_detector = ObjectDetector(model_path="", socketio=socketio, use_fallback=True)
+    print(f"Attempting to load custom model: {custom_model_path}")
+    custom_detector = ObjectDetector(model_path=custom_model_path, socketio=socketio)
+    if custom_detector.model_loaded:
+        print(f"Custom model loaded with classes: {list(custom_detector.model.names.values())}")
+    else:
+        print("Custom model failed to load.")
 except Exception as e:
-    print(f"Error initializing object detector: {e}")
-    print("Using fallback detection.")
-    object_detector = ObjectDetector(model_path="", socketio=socketio, use_fallback=True)
+    print(f"Error loading custom model: {e}")
+
+try:
+    print(f"Attempting to load COCO model: {coco_model_path}")
+    coco_detector = ObjectDetector(model_path=coco_model_path, socketio=socketio)
+    if coco_detector.model_loaded:
+        print(f"COCO model loaded with classes: {list(coco_detector.model.names.values())}")
+    else:
+        print("COCO model failed to load.")
+except Exception as e:
+    print(f"Error loading COCO model: {e}")
 
 # Config for detection settings
 config = Config()
+
+# Helper to get the active detector
+
+def get_active_detector():
+    if config.selected_model == "custom" and custom_detector and custom_detector.model_loaded:
+        return custom_detector
+    elif config.selected_model == "coco" and coco_detector and coco_detector.model_loaded:
+        return coco_detector
+    # fallback
+    return custom_detector if custom_detector and custom_detector.model_loaded else coco_detector
 
 @app.route('/')
 def index():
@@ -50,35 +64,69 @@ def index():
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     form = NotificationForm()
-    
-    # Get available classes if model is loaded
-    available_classes = []
-    if object_detector.model_loaded and hasattr(object_detector.model, 'names'):
-        available_classes = list(object_detector.model.names.values())
-    
-    # Always include Movement for fallback detection
+    # Remove model selection logic
+    # Get available classes from both models
+    available_classes = set()
+    if custom_detector and custom_detector.model_loaded and hasattr(custom_detector.model, 'names'):
+        available_classes.update(list(custom_detector.model.names.values()))
+    if coco_detector and coco_detector.model_loaded and hasattr(coco_detector.model, 'names'):
+        available_classes.update(list(coco_detector.model.names.values()))
     if "Movement" not in available_classes:
-        available_classes.append("Movement")
-    
+        available_classes.add("Movement")
+    # Always ensure custom classes appear
+    for custom_class in ["stone", "gas_cylinder"]:
+        available_classes.add(custom_class)
+    available_classes = sorted(available_classes)
+
     if form.validate_on_submit():
         config.monitored_objects = form.monitored_objects.data.split(',')
         config.notification_threshold = form.confidence_threshold.data
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('index'))
-        
-    # Pre-populate form with current settings
     if not form.is_submitted():
         form.monitored_objects.data = ','.join(config.monitored_objects)
         form.confidence_threshold.data = config.notification_threshold
-        
     return render_template('settings.html', form=form, available_classes=available_classes)
 
 @app.route('/video_feed')
 def video_feed():
-    return Response(
-        object_detector.generate_frames(config),
-        mimetype='multipart/x-mixed-replace; boundary=frame'
-    )
+    # Run both detectors and merge results
+    def generate_frames():
+        while True:
+            frame = None
+            detected_objects = []
+            # Get frame from camera (use custom_detector's camera logic)
+            if custom_detector and custom_detector.model_loaded:
+                custom_detector._ensure_camera_open()
+                ret, frame = custom_detector.cap.read()
+            elif coco_detector and coco_detector.model_loaded:
+                coco_detector._ensure_camera_open()
+                ret, frame = coco_detector.cap.read()
+            else:
+                break
+            if not ret or frame is None:
+                break
+            # Run both detectors on the same frame
+            frame_custom, detected_custom = (frame, [])
+            frame_coco, detected_coco = (frame, [])
+            if custom_detector and custom_detector.model_loaded:
+                frame_custom, detected_custom = custom_detector._process_frame(frame.copy(), config)
+            if coco_detector and coco_detector.model_loaded:
+                frame_coco, detected_coco = coco_detector._process_frame(frame.copy(), config)
+            # Overlay both results (custom first, then coco)
+            # For simplicity, show custom detections on frame
+            # Optionally, you could merge bounding boxes from both
+            # Here, just use custom's frame if any custom detection, else coco's
+            if detected_custom:
+                out_frame = frame_custom
+            else:
+                out_frame = frame_coco
+            # Encode and yield
+            ret, buffer = cv2.imencode('.jpg', out_frame)
+            if not ret:
+                continue
+            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @socketio.on('connect')
 def handle_connect():
@@ -89,4 +137,4 @@ def handle_disconnect():
     print('Client disconnected')
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True) 
+    socketio.run(app, debug=True)
