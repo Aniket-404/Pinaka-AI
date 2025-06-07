@@ -17,7 +17,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')
 socketio = SocketIO(app)
 
 # Try to download the YOLOv8n model if it doesn't exist
-model_path = "yolov8n.pt"
+model_path = "custom_yolo_100epochs_best.pt"
 if not os.path.exists(model_path):
     try:
         import urllib.request
