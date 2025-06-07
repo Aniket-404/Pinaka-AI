@@ -1,133 +1,65 @@
-# Pinaka AI - Real-time Object Detection System 🎯
+# Pinaka-AI: YOLOv8 Custom Object Detection System
 
-A powerful real-time object detection system using YOLOv8 and Flask, with browser notifications for detected objects. Monitor your surroundings with AI-powered detection and instant alerts! 🚀
+## Overview
+Pinaka-AI is a production-ready, minimal, and clear object detection system using YOLOv8 and Flask. It supports real-time detection, custom datasets, and a unified training/deployment pipeline.
 
-## ✨ Features
+## Project Structure
+- `app.py` — Flask web server for real-time detection and notifications
+- `app/` — Web templates, static files, forms, and utility modules
+- `models/` — YOLO model weights and config files
+- `custom_dataset/` — Images and labels for training/validation
+- `backup_models/` — Backup of best model weights
+- `training/` — Training configs, logs, results, and pipeline scripts
+    - `scripts/master_script.py` — Single entry-point for full training pipeline
+- `docs/` — Documentation and guides
 
-- 🔍 Real-time object detection using YOLOv8
-- 📱 Support for both webcam and mobile camera (via DroidCam)
-- 🔔 Browser notifications for detected objects
-- ⚙️ Customizable object monitoring
-- 🎨 Modern, responsive web interface
-- 📊 Real-time confidence scores
-- 📸 Snapshot capture of detected objects
-- 🔄 Fallback motion detection mode
+## Installation
+1. **Clone the repository:**
+   ```bash
+   git clone <your_repo_url>
+   cd pinaka-ai
+   ```
+2. **(Optional) Set up a virtual environment:**
+   ```bash
+   python -m venv venv
+   # Windows:
+   venv\Scripts\activate
+   # macOS/Linux:
+   source venv/bin/activate
+   ```
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## 🛠️ Prerequisites
+## Workflow
+### 1. Training Pipeline
+- Run the full pipeline (prepare, train, evaluate, deploy):
+  ```bash
+  python training/scripts/master_script.py
+  ```
+- For stepwise control, use:
+  ```bash
+  python training/scripts/master_script.py --step train
+  python training/scripts/master_script.py --step test
+  # etc.
+  ```
+- Quick test run (10 epochs):
+  ```bash
+  python training/scripts/master_script.py --quick
+  ```
 
-- Python 3.8 or higher
-- Git LFS (for handling large model files)
-- Webcam or mobile camera
-- Modern web browser with JavaScript enabled
+### 2. Running the Web App
+- Start the Flask server:
+  ```bash
+  python app.py
+  ```
+- Open your browser at [http://localhost:5000](http://localhost:5000)
 
-## 📦 Installation
+## Notes
+- Place your YOLO model weights in the `models/` directory.
+- The `custom_dataset/` folder should be organized as per YOLOv8 requirements.
+- All configuration is handled via `training/config.yaml` and environment variables in `.env`.
 
-1. **Clone the repository** 🏗️
-```bash
-git clone https://github.com/yourusername/pinaka-ai.git
-cd pinaka-ai
-```
-
-2. **Install Git LFS** 📥
-```bash
-# Windows (using Chocolatey - Run PowerShell as Administrator)
-choco install git-lfs
-
-# Or download manually from: https://git-lfs.github.com/
-```
-
-3. **Initialize Git LFS** 🔄
-```bash
-git lfs install
-```
-
-4. **Download the YOLOv8 model** 🤖
-```bash
-# Create the models directory if it doesn't exist
-mkdir -p app/models
-
-# Download the YOLOv8n model
-curl -L https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt -o app/models/yolov8n.pt
-```
-
-5. **Create and activate virtual environment** 🌐
-```bash
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
-```
-
-6. **Install dependencies** 📚
-```bash
-pip install -r requirements.txt
-```
-
-## 🚀 Usage
-
-1. **Start the application** ▶️
-```bash
-python app.py
-```
-
-2. **Access the web interface** 🌐
-- Open your browser and navigate to `http://localhost:5000`
-- Allow browser notifications when prompted
-
-3. **Configure detection settings** ⚙️
-- Go to the Settings page
-- Select objects to monitor (e.g., person, car, dog)
-- Adjust confidence threshold (0.1-1.0)
-- Save your settings
-
-4. **Using mobile camera (optional)** 📱
-- Install DroidCam app on your phone
-  - Android: [Google Play Store](https://play.google.com/store/apps/details?id=com.dev47apps.droidcam)
-  - iOS: [App Store](https://apps.apple.com/us/app/droidcam-wireless-webcam/id1510258105)
-- Install DroidCam client on your laptop
-  - Download from [DroidCam website](https://www.dev47apps.com/)
-- Connect both devices to the same WiFi network
-- Start DroidCam on your phone and note the IP address
-- Enter the IP in DroidCam client on your laptop
-- The system will automatically detect and use DroidCam
-
-## 🎯 Detection Features
-
-- Real-time object detection with bounding boxes
-- Confidence scores for each detection
-- Browser notifications with snapshots
-- Customizable object monitoring
-- Motion detection fallback mode
-- Responsive web interface
-
-## ⚙️ Configuration Options
-
-- **Monitored Objects**: Select which objects to detect
-- **Confidence Threshold**: Adjust detection sensitivity
-- **Notification Cooldown**: Control notification frequency
-- **Camera Selection**: Choose between webcam and DroidCam
-
-## 🐛 Troubleshooting
-
-1. **Camera not detected** 🔍
-   - Ensure your camera is properly connected
-   - Check if DroidCam is running (if using mobile camera)
-   - Try refreshing the page
-
-2. **Model not loading** 🤖
-   - Verify the YOLOv8 model is downloaded
-   - Check if you have sufficient disk space
-   - Ensure Python version is compatible
-
-3. **Notifications not working** 🔔
-   - Allow browser notifications
-   - Check browser settings
-   - Try using a different browser
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+## License
+MIT License. See `LICENSE` for details.
