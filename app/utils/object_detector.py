@@ -1,5 +1,4 @@
 import cv2
-import torch
 import time
 import base64
 import os
@@ -7,14 +6,24 @@ import sys
 import urllib.request
 import numpy as np
 import shutil
+import random
 
-# Try importing YOLO, but have a fallback if it fails
-try:
-    from ultralytics import YOLO
-    YOLO_AVAILABLE = True
-except Exception as e:
-    print(f"Error importing YOLO: {e}")
+# Check if we're in production mode
+IS_PRODUCTION = os.environ.get('RENDER', False)
+
+# Only import YOLO/torch in development mode or if explicitly requested
+if not IS_PRODUCTION:
+    try:
+        import torch
+        from ultralytics import YOLO
+        YOLO_AVAILABLE = True
+    except Exception as e:
+        print(f"Error importing YOLO: {e}")
+        YOLO_AVAILABLE = False
+else:
+    # In production, don't even try to import unless explicitly needed
     YOLO_AVAILABLE = False
+    print("Running in production mode - YOLO imports disabled by default")
 
 class ObjectDetector:
     def __init__(self, model_path="yolov8n.pt", camera_id=0, socketio=None, use_fallback=False):
@@ -22,20 +31,24 @@ class ObjectDetector:
         self.socketio = socketio
         self.camera_id = camera_id
         self.cap = None
-        self.demo_mode = os.environ.get('RENDER', False)
-        self.demo_frame = None
+        self.demo_mode = IS_PRODUCTION
+        self.last_notification_time = {}  # For tracking notification cooldowns
         
-        # Initialize demo frame
-        self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(self.demo_frame, "Initializing object detection...", (50, 240), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        # Generate demo frame with some sample detections
+        self._create_demo_frame()
         
+        # In production, we'll use the demo mode by default
+        if IS_PRODUCTION:
+            print("Running in production environment, using demo mode")
+            return
+            
+        # Skip actual model loading if using fallback or YOLO not available
         if use_fallback or not YOLO_AVAILABLE:
-            print("Using fallback motion detection mode")
+            print("Using fallback detection mode")
             return
             
         try:
-            # Check if model exists, if not, try multiple locations and download if needed
+            # Model loading (only in development mode)
             model_locations = [
                 model_path,  # Original path
                 os.path.join('models', os.path.basename(model_path)),  # models directory
@@ -50,36 +63,21 @@ class ObjectDetector:
                     model_found = True
                     break
             
-            if not model_found and os.path.basename(model_path) == "yolov8n.pt":
-                print(f"Model not found. Attempting to download manually...")
-                try:
-                    # Make sure the models directory exists
-                    os.makedirs('models', exist_ok=True)
-                    
-                    # Manual download with urllib
-                    url = "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"
-                    print(f"Downloading from {url}...")
-                    download_path = os.path.join('models', 'yolov8n.pt')
-                    urllib.request.urlretrieve(url, download_path)
-                    print(f"Successfully downloaded to {download_path}")
-                    
-                    # Also save a copy to tmp
-                    tmp_path = os.path.join('/tmp/models', 'yolov8n.pt')
-                    os.makedirs('/tmp/models', exist_ok=True)
-                    shutil.copy2(download_path, tmp_path)
-                    print(f"Saved a copy to {tmp_path}")
-                    
-                    model_path = download_path
-                    model_found = True
-                except Exception as e:
-                    print(f"Failed to download model: {e}")
-                    print("Will use demo mode with placeholder detection")
-            
             if not model_found:
-                print(f"Could not find or download model: {model_path}")
+                print(f"Could not find model: {model_path}")
                 print("Will use demo mode with placeholder detection")
                 self.demo_mode = True
                 return
+            
+            # Import YOLO here if we're actually going to use it
+            if IS_PRODUCTION and not 'YOLO' in globals():
+                try:
+                    import torch
+                    from ultralytics import YOLO
+                except Exception as e:
+                    print(f"Error importing YOLO in production: {e}")
+                    self.demo_mode = True
+                    return
             
             # Load the model
             print(f"Loading model from: {model_path}")
@@ -91,13 +89,7 @@ class ObjectDetector:
                 print(f"Model loaded with classes: {list(self.model.names.values())}")
                 
                 # Update demo frame with success message
-                self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                cv2.putText(self.demo_frame, "Model loaded successfully", (50, 200), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(self.demo_frame, f"Classes: {list(self.model.names.values())[:5]}...", (50, 240), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                cv2.putText(self.demo_frame, "Running in demo mode (no camera)", (50, 280), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                self._create_demo_frame(f"Model loaded: {os.path.basename(model_path)}", True)
             else:
                 print("Model loaded but class names not available")
                 
@@ -106,13 +98,244 @@ class ObjectDetector:
             print("Will fall back to a simplified detection method")
             
             # Update demo frame with error message
-            self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(self.demo_frame, "Error loading model", (50, 200), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            cv2.putText(self.demo_frame, str(e)[:50], (50, 240), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            cv2.putText(self.demo_frame, "Using simplified detection", (50, 280), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            self._create_demo_frame(f"Error: {str(e)[:50]}", False)
+    
+    def _create_demo_frame(self, message="Demo Mode - No Camera", success=True):
+        """Create a demo frame with simulated detections for deployment"""
+        # Create a base frame (black background)
+        self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        
+        # Draw some sample shapes to make it more interesting
+        colors = [(0, 255, 0), (0, 0, 255), (255, 0, 0), (255, 255, 0)]
+        
+        # Add the message at the top
+        color = (0, 255, 0) if success else (0, 0, 255)
+        cv2.putText(self.demo_frame, message, (20, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        
+        # Add timestamp to show it's updating
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        cv2.putText(self.demo_frame, timestamp, (20, 60), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        
+        # Add info about deployment
+        cv2.putText(self.demo_frame, "Pinaka-AI running on Render", (20, 450), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        
+        # Draw some random objects with bounding boxes to simulate detections
+        objects = ["person", "car", "stone", "gas_cylinder"]
+        for i in range(3):
+            # Randomize the position and size of the "detected" object
+            x = random.randint(50, 500)
+            y = random.randint(100, 350)
+            w = random.randint(50, 150)
+            h = random.randint(50, 150)
+            
+            # Randomly select an object and color
+            obj = random.choice(objects)
+            color = random.choice(colors)
+            
+            # Draw the bounding box and label
+            cv2.rectangle(self.demo_frame, (x, y), (x+w, y+h), color, 2)
+            conf = random.uniform(0.5, 0.95)
+            cv2.putText(self.demo_frame, f"{obj} {conf:.2f}", 
+                       (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+    
+    def _ensure_camera_open(self):
+        """Ensure the camera is open, or use demo mode if in production"""
+        # In production, always use demo mode
+        if IS_PRODUCTION:
+            self.demo_mode = True
+            # Update the demo frame to simulate changing video
+            self._create_demo_frame()
+            return
+            
+        # If cap is None or not opened, try to open it
+        if self.cap is None or not self.cap.isOpened():
+            # In development, try to access camera
+            for device_id in [1, 2, 0]:  # Try different camera devices
+                self.cap = cv2.VideoCapture(device_id)
+                if self.cap.isOpened():
+                    print(f"Successfully opened camera device {device_id}")
+                    self.demo_mode = False
+                    break
+                self.cap.release()
+            
+            if not self.cap.isOpened():
+                print("Could not open any camera device. Using demo mode.")
+                self.cap = cv2.VideoCapture()
+                self.demo_mode = True
+                self._create_demo_frame("Camera not available")
+                
+            time.sleep(0.5)  # Give camera time to initialize
+    
+    def _process_frame(self, frame, config):
+        """Process a single frame with detection"""
+        detected_objects = []
+        current_time = time.time()
+        
+        # In demo mode or production, use simulated detections
+        if IS_PRODUCTION or self.demo_mode:
+            # Update the demo frame
+            if hasattr(self, 'frame_counter'):
+                self.frame_counter += 1
+            else:
+                self.frame_counter = 0
+                
+            # Every 10 frames, update the demo frame to simulate motion
+            if self.frame_counter % 10 == 0:
+                self._create_demo_frame()
+                
+            # Add simulated detections
+            objects = []
+            for obj in config.monitored_objects:
+                if random.random() > 0.7:  # 30% chance to "detect" each monitored object
+                    confidence = random.uniform(0.6, 0.95)
+                    objects.append((obj, confidence))
+                    
+                    # Randomly create a notification
+                    if confidence > config.notification_threshold and random.random() > 0.9:
+                        self._send_notification(self.demo_frame, obj, confidence, current_time, config)
+            
+            return self.demo_frame, objects
+        
+        # Regular model-based detection (only in development)
+        if self.model_loaded:
+            # Perform object detection with YOLO
+            results = self.model(frame)
+            
+            # Process detection results
+            for result in results:
+                for box in result.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])  # Bounding box coordinates
+                    confidence = box.conf[0].item()  # Confidence score
+                    class_id = int(box.cls[0])
+                    label = result.names[class_id]  # Class name
+                    
+                    # Check if object should be monitored
+                    if label in config.monitored_objects and confidence >= config.notification_threshold:
+                        # Draw bounding box
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        cv2.putText(frame, f"{label} {confidence:.2f}", (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                        
+                        detected_objects.append((label, confidence))
+                        
+                        # Send notification if cooldown period has passed
+                        self._send_notification(frame, label, confidence, current_time, config, x1, y1, x2, y2)
+        else:
+            # Simple detection - just add a message to the frame
+            cv2.putText(frame, "Model not loaded - using simplified detection", 
+                       (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            
+            # Draw some fake detections
+            self._add_simulated_detections(frame, config, detected_objects, current_time)
+                
+        return frame, detected_objects
+    
+    def _add_simulated_detections(self, frame, config, detected_objects, current_time):
+        """Add simulated detections when real model is not available"""
+        # Use motion detection as a fallback
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (21, 21), 0)
+        
+        # Store the first frame for comparison
+        if not hasattr(self, 'first_frame') or self.first_frame is None:
+            self.first_frame = gray
+            return
+        
+        # Compute absolute difference between current frame and first frame
+        frame_delta = cv2.absdiff(self.first_frame, gray)
+        thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
+        
+        # Dilate the thresholded image to fill in holes
+        thresh = cv2.dilate(thresh, None, iterations=2)
+        
+        # Find contours on thresholded image
+        contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Minimum contour area to be considered significant motion
+        min_area = 500
+        
+        for c in contours:
+            if cv2.contourArea(c) < min_area:
+                continue
+                
+            # Compute the bounding box for the contour
+            (x, y, w, h) = cv2.boundingRect(c)
+            
+            # Draw a rectangle around the contour
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            
+            # Add "Movement" detection
+            label = "Movement"
+            confidence = 0.7  # Fake confidence
+            
+            # Check if this object should be monitored
+            if label in config.monitored_objects and confidence >= config.notification_threshold:
+                cv2.putText(frame, f"{label} {confidence:.2f}", (x, y - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                
+                detected_objects.append((label, confidence))
+                
+                # Send notification if cooldown period has passed
+                self._send_notification(frame, label, confidence, current_time, config, x, y, x + w, y + h)
+                
+        # Periodically update the first frame to adapt to lighting changes
+        if time.time() % 10 < 0.1:  # Update roughly every 10 seconds
+            self.first_frame = gray
+    
+    def _send_notification(self, frame, label, confidence, current_time, config, x1=0, y1=0, x2=0, y2=0):
+        """Send a notification via SocketIO"""
+        # Check if socketio is available
+        if not self.socketio:
+            return
+            
+        # Check cooldown period (don't spam notifications)
+        cooldown = 5  # seconds between notifications for same object
+        if label in self.last_notification_time:
+            time_since_last = current_time - self.last_notification_time[label]
+            if time_since_last < cooldown:
+                return
+                
+        # Update the last notification time
+        self.last_notification_time[label] = current_time
+        
+        # Encode a small portion of the frame for the notification
+        try:
+            # If we have valid coordinates, crop to the object
+            if x1 > 0 and y1 > 0 and x2 > x1 and y2 > y1:
+                # Add some padding
+                padding = 20
+                x1 = max(0, x1 - padding)
+                y1 = max(0, y1 - padding)
+                x2 = min(frame.shape[1], x2 + padding)
+                y2 = min(frame.shape[0], y2 + padding)
+                
+                # Crop the frame
+                cropped = frame[y1:y2, x1:x2]
+            else:
+                # Use the whole frame
+                cropped = frame
+                
+            # Resize for smaller image
+            cropped = cv2.resize(cropped, (320, 240))
+            
+            # Encode as JPEG
+            ret, buffer = cv2.imencode('.jpg', cropped, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if not ret:
+                return
+                
+            # Convert to base64
+            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+            
+            # Send the notification
+            self.socketio.emit('detection_alert', {
+                'object': label,
+                'confidence': float(confidence),
+                'timestamp': current_time,
+                'image': jpg_as_text
+            })
     
     def _ensure_camera_open(self):
         """Ensure the camera is open, attempt to reopen if closed"""

@@ -2,7 +2,6 @@ import os
 from flask import Flask, render_template, redirect, url_for, flash, Response
 from flask_socketio import SocketIO
 from app.forms import NotificationForm
-from app.utils.object_detector import ObjectDetector
 from app.utils.config import Config
 from dotenv import load_dotenv
 import cv2
@@ -29,47 +28,44 @@ app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')
 socketio = SocketIO(app)
 
-# Load both models
-custom_model_path = "models/custom_yolo_100epochs_best.pt"
-coco_model_path = "models/yolov8n.pt"
-
-custom_detector = None
-coco_detector = None
-
 # Check if we're in production environment
 is_production = os.environ.get('RENDER', False)
 
-try:
-    print(f"Attempting to load custom model: {custom_model_path}")
-    custom_detector = ObjectDetector(model_path=custom_model_path, socketio=socketio)
-    if custom_detector.model_loaded:
-        print(f"Custom model loaded with classes: {list(custom_detector.model.names.values())}")
-    else:
-        print("Custom model failed to load. Using demo mode.")
-        if is_production:
-            # In production, ensure we have a demo mode detector
-            custom_detector.demo_mode = True
-except Exception as e:
-    print(f"Error loading custom model: {e}")
-    # Create a fallback detector in demo mode
-    custom_detector = ObjectDetector(use_fallback=True)
-    custom_detector.demo_mode = True
+# Only import the ObjectDetector class after setting environment variables
+from app.utils.object_detector import ObjectDetector
 
-try:
-    print(f"Attempting to load COCO model: {coco_model_path}")
-    coco_detector = ObjectDetector(model_path=coco_model_path, socketio=socketio)
-    if coco_detector.model_loaded:
-        print(f"COCO model loaded with classes: {list(coco_detector.model.names.values())}")
-    else:
-        print("COCO model failed to load. Using demo mode.")
-        if is_production:
-            # In production, ensure we have a demo mode detector
-            coco_detector.demo_mode = True
-except Exception as e:
-    print(f"Error loading COCO model: {e}")
-    # Create a fallback detector in demo mode
+# Model paths
+custom_model_path = "models/custom_yolo_100epochs_best.pt"
+coco_model_path = "models/yolov8n.pt"
+
+# Initialize detectors
+custom_detector = None
+coco_detector = None
+
+# If in production mode, use simplified demo detectors
+if is_production:
+    print("Running in production mode, using simplified detectors")
+    custom_detector = ObjectDetector(use_fallback=True)
     coco_detector = ObjectDetector(use_fallback=True)
-    coco_detector.demo_mode = True
+else:
+    # In development mode, try to load the actual models
+    try:
+        print(f"Attempting to load custom model: {custom_model_path}")
+        custom_detector = ObjectDetector(model_path=custom_model_path, socketio=socketio)
+        if custom_detector.model_loaded:
+            print(f"Custom model loaded successfully")
+    except Exception as e:
+        print(f"Error loading custom model: {e}")
+        custom_detector = ObjectDetector(use_fallback=True)
+
+    try:
+        print(f"Attempting to load COCO model: {coco_model_path}")
+        coco_detector = ObjectDetector(model_path=coco_model_path, socketio=socketio)
+        if coco_detector.model_loaded:
+            print(f"COCO model loaded successfully")
+    except Exception as e:
+        print(f"Error loading COCO model: {e}")
+        coco_detector = ObjectDetector(use_fallback=True)
 
 # Config for detection settings
 config = Config()

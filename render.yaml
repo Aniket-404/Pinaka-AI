@@ -3,7 +3,7 @@ services:
     name: pinaka-ai
     runtime: python
     buildCommand: chmod +x build.sh && ./build.sh
-    startCommand: gunicorn --worker-class eventlet -w 1 wsgi:app
+    startCommand: gunicorn --worker-class eventlet -w 1 --timeout 120 --preload --bind 0.0.0.0:$PORT wsgi:app
     plan: free
     envVars:
       - key: SECRET_KEY
@@ -18,3 +18,7 @@ services:
         value: /tmp/.config
       - key: PYTHONUNBUFFERED
         value: 1
+      - key: PYTORCH_NO_CUDA_MEMORY_CACHING
+        value: 1
+    healthCheckPath: /health
+    autoDeploy: true
