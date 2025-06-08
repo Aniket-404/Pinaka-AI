@@ -11,3 +11,8 @@ class Config:
         self.notification_threshold = 0.7  # Default confidence threshold
         self.notification_cooldown = 10  # Seconds between notifications for the same object
         self.last_notification_time = {}  # Track last notification time for each object type
+        
+        # SMS notification settings
+        self.sms_enabled = False  # Whether SMS notifications are enabled
+        self.sms_cooldown = 60  # Seconds between SMS notifications (longer than regular notifications)
+        self.sms_objects = ["person", "car", "stone", "gas_cylinder"]  # Objects that trigger SMS

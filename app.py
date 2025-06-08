@@ -202,8 +202,7 @@ def settings():
         if hasattr(coco_detector, 'model') and hasattr(coco_detector.model, 'names'):
             coco_classes = list(coco_detector.model.names.values())
             available_classes['coco'] = sorted(coco_classes)
-    
-    # Add special classes
+      # Add special classes
     special_classes = ["Movement", "stone", "gas_cylinder"]
     available_classes['special'] = special_classes
     
@@ -218,16 +217,31 @@ def settings():
     
     # Sort classes for display
     all_classes = sorted(all_classes)
-
+    
     if form.validate_on_submit():
         config.monitored_objects = [c.strip() for c in form.monitored_objects.data.split(',') if c.strip()]
         config.notification_threshold = form.confidence_threshold.data
+        
+        # Save SMS settings
+        config.sms_enabled = form.sms_enabled.data
+        if form.sms_objects.data:
+            config.sms_objects = [c.strip() for c in form.sms_objects.data.split(',') if c.strip()]
+        config.sms_cooldown = form.sms_cooldown.data
+        
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('index'))
     
     if not form.is_submitted():
         form.monitored_objects.data = ','.join(config.monitored_objects)
         form.confidence_threshold.data = config.notification_threshold
+        
+        # Initialize SMS form fields if the config has them
+        if hasattr(config, 'sms_enabled'):
+            form.sms_enabled.data = config.sms_enabled
+        if hasattr(config, 'sms_objects'):
+            form.sms_objects.data = ','.join(config.sms_objects)
+        if hasattr(config, 'sms_cooldown'):
+            form.sms_cooldown.data = config.sms_cooldown
     
     return render_template('settings.html', form=form, 
                           available_classes=all_classes, 

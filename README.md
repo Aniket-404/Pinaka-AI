@@ -81,5 +81,31 @@ Pinaka-AI is a production-ready, minimal, and clear object detection system usin
 - The `custom_dataset/` folder should be organized as per YOLOv8 requirements.
 - All configuration is handled via `training/config.yaml` and environment variables in `.env`.
 
+## SMS Notifications
+Pinaka-AI now supports SMS notifications when objects are detected. To enable this feature:
+
+1. **Set up a Twilio account:**
+   - Sign up at [Twilio](https://www.twilio.com/)
+   - Purchase a phone number
+   - Get your Account SID and Auth Token
+
+2. **Configure your environment variables:**
+   - Copy `.env.example` to `.env`
+   - Fill in your Twilio credentials:
+     ```
+     TWILIO_ACCOUNT_SID=your_account_sid
+     TWILIO_AUTH_TOKEN=your_auth_token
+     TWILIO_FROM_NUMBER=your_twilio_phone_number
+     TWILIO_TO_NUMBER=your_phone_number
+     ```
+
+3. **Enable SMS notifications in the application:**
+   - Go to Settings page
+   - Check "Enable SMS Notifications"
+   - Specify which objects should trigger SMS alerts
+   - Set the cooldown period between notifications
+
+SMS notifications include object type, detection confidence, timestamp, and object coordinates.
+
 ## License
 MIT License. See `LICENSE` for details.

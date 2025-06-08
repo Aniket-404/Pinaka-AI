@@ -7,6 +7,7 @@ import urllib.request
 import numpy as np
 import shutil
 import random
+from app.utils.sms_notifier import SMSNotifier
 
 # Check if we're in production mode
 IS_PRODUCTION = os.environ.get('RENDER', False)
@@ -19,6 +20,9 @@ class ObjectDetector:
         self.last_notification_time = {}  # For tracking notification cooldowns
         self.yolo_available = False
         self.last_detections = []  # Store detailed detection info
+        
+        # Initialize SMS notifier
+        self.sms_notifier = SMSNotifier()
         
         # Generate demo frame with some sample detections
         self._create_demo_frame()
@@ -278,9 +282,8 @@ class ObjectDetector:
         # Periodically update the first frame to adapt to lighting changes
         if time.time() % 10 < 0.1:  # Update roughly every 10 seconds
             self.first_frame = gray
-    
     def _send_notification(self, frame, label, confidence, current_time, config, x1=0, y1=0, x2=0, y2=0):
-        """Send a notification via SocketIO"""
+        """Send a notification via SocketIO and SMS if configured"""
         # Check if socketio is available
         if not self.socketio:
             return
@@ -321,12 +324,27 @@ class ObjectDetector:
                 return
                 
             # Convert to base64
-            jpg_as_text = base64.b64encode(buffer).decode('utf-8')            # Send the notification
+            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+            
+            # Send the notification
             self.socketio.emit('detection_alert', {
                 'object': label,
                 'confidence': float(confidence),
                 'timestamp': current_time,
                 'image': jpg_as_text
             })
+            
+            # Send SMS notification if enabled and object is in the SMS list
+            if hasattr(config, 'sms_enabled') and config.sms_enabled:
+                if label in config.sms_objects:
+                    # Check SMS-specific cooldown
+                    if self.sms_notifier.should_send_notification(label, current_time, config.sms_cooldown):
+                        # Send SMS with detection details
+                        self.sms_notifier.send_detection_alert(
+                            object_name=label,
+                            confidence=confidence,
+                            coordinates=(x1, y1, x2, y2)
+                        )
+                        
         except Exception as e:
             print(f"Error sending notification: {e}")

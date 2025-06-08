@@ -179,12 +179,7 @@
                 
                 <div class="mb-4">
                     <label for="confidence_threshold" class="form-label">{{ form.confidence_threshold.label }}</label>
-                    <div class="slider-container">
-                        {{ form.confidence_threshold(class="form-control", type="range", min="0.1", max="1.0", step="0.05") }}
-                        <div class="text-center mt-2">
-                            <span class="slider-value" id="confidence-value">0.7</span>
-                        </div>
-                    </div>
+                    {{ form.confidence_threshold(class="form-control", type="number", step="0.05", min="0", max="1", id="confidence_threshold") }}
                     {% if form.confidence_threshold.errors %}
                         <div class="text-danger mt-1">
                             {% for error in form.confidence_threshold.errors %}
@@ -192,10 +187,66 @@
                             {% endfor %}
                         </div>
                     {% endif %}
-                    <div class="form-text">Minimum confidence level (0.1-1.0) required to trigger a notification</div>
+                    <div class="form-text">Minimum confidence score (0-1) required for detection notifications</div>
                 </div>
                 
-                {{ form.submit(class="btn btn-primary btn-submit") }}
+                <!-- SMS Notification Settings -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">SMS Notification Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check mb-3">
+                            {{ form.sms_enabled(class="form-check-input", id="sms_enabled") }}
+                            <label for="sms_enabled" class="form-check-label">{{ form.sms_enabled.label }}</label>
+                            <div class="form-text">Send SMS notifications when specified objects are detected</div>
+                        </div>
+                        
+                        <div id="sms-settings" style="display: none;">
+                            <div class="mb-3">
+                                <label for="sms_objects" class="form-label">{{ form.sms_objects.label }}</label>
+                                {{ form.sms_objects(class="form-control", placeholder="person,car,stone", id="sms_objects_input") }}
+                                {% if form.sms_objects.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.sms_objects.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Specify which objects should trigger SMS alerts (comma-separated)</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="sms_cooldown" class="form-label">{{ form.sms_cooldown.label }}</label>
+                                {{ form.sms_cooldown(class="form-control", type="number", min="10", max="3600", id="sms_cooldown") }}
+                                {% if form.sms_cooldown.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.sms_cooldown.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Minimum time between SMS alerts for the same object (in seconds)</div>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <h6>SMS Configuration Instructions</h6>
+                                <p>To enable SMS notifications, you need to set the following environment variables:</p>
+                                <ul>
+                                    <li><code>TWILIO_ACCOUNT_SID</code> - Your Twilio account SID</li>
+                                    <li><code>TWILIO_AUTH_TOKEN</code> - Your Twilio auth token</li>
+                                    <li><code>TWILIO_FROM_NUMBER</code> - Your Twilio phone number</li>
+                                    <li><code>TWILIO_TO_NUMBER</code> - Your phone number to receive alerts</li>
+                                </ul>
+                                <p>These can be set in your environment or in a <code>.env</code> file.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-grid gap-2">
+                    {{ form.submit(class="btn btn-primary btn-lg") }}
+                </div>
             </form>
         </div>
     </div>
@@ -256,6 +307,22 @@
                 updateSelectedTags();
             });
         });
+    });
+
+    // Add JavaScript for SMS settings toggle
+    document.addEventListener('DOMContentLoaded', function() {
+        const smsEnabledCheckbox = document.getElementById('sms_enabled');
+        const smsSettingsDiv = document.getElementById('sms-settings');
+        
+        // Initial state
+        if (smsEnabledCheckbox && smsSettingsDiv) {
+            smsSettingsDiv.style.display = smsEnabledCheckbox.checked ? 'block' : 'none';
+            
+            // Toggle settings visibility when checkbox changes
+            smsEnabledCheckbox.addEventListener('change', function() {
+                smsSettingsDiv.style.display = this.checked ? 'block' : 'none';
+            });
+        }
     });
 </script>
 {% endblock %}
