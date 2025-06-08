@@ -9,6 +9,7 @@ import time
 import traceback
 import base64
 import numpy as np
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -39,11 +40,33 @@ from app.utils.object_detector import ObjectDetector
 
 # Model paths
 custom_model_path = "models/custom_yolo_100epochs_best.pt"
+custom_model_drive_url = "https://drive.google.com/file/d/1a5URsD5oIkujCwpmUaGUd_6HTSswdcwZ/view?usp=sharing"
 coco_model_path = "models/yolov8n.pt"
 
 # Initialize detectors
 custom_detector = None
 coco_detector = None
+
+def download_file_from_google_drive(drive_url, destination):
+    # Extract file ID from Google Drive share link
+    import re
+    file_id_match = re.search(r'/d/([\w-]+)', drive_url)
+    if not file_id_match:
+        print('Invalid Google Drive link')
+        return False
+    file_id = file_id_match.group(1)
+    download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
+    print(f"Downloading model from Google Drive: {download_url}")
+    response = requests.get(download_url, stream=True)
+    if response.status_code == 200:
+        with open(destination, 'wb') as f:
+            for chunk in response.iter_content(1024 * 1024):
+                f.write(chunk)
+        print(f"Downloaded model to {destination}")
+        return True
+    else:
+        print(f"Failed to download model. Status code: {response.status_code}")
+        return False
 
 def initialize_model(model_path, name="model", max_retries=2, retry_delay=2):
     """Initialize a model with retry logic"""
@@ -68,6 +91,11 @@ def initialize_model(model_path, name="model", max_retries=2, retry_delay=2):
     # If we get here, all attempts failed
     print(f"All attempts to load {name} failed, using fallback")
     return ObjectDetector(use_fallback=True)
+
+# Download the custom model if not present
+if not os.path.exists(custom_model_path):
+    print(f"Custom model not found at {custom_model_path}. Downloading from Google Drive...")
+    download_file_from_google_drive(custom_model_drive_url, custom_model_path)
 
 # Always try to load the actual models with retry logic
 custom_detector = initialize_model(custom_model_path, "custom model")
