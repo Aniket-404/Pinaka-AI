@@ -3,6 +3,10 @@ import importlib.util
 import os
 import sys
 
+# Run environment initialization
+from init_env import setup_environment
+setup_environment()
+
 # Directly load the app.py module
 spec = importlib.util.spec_from_file_location("app_module", 
                                              os.path.join(os.path.dirname(__file__), "app.py"))

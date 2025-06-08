@@ -11,6 +11,14 @@ import time
 # Load environment variables
 load_dotenv()
 
+# Set Ultralytics config directory if not already set
+if 'YOLO_CONFIG_DIR' not in os.environ:
+    os.environ['YOLO_CONFIG_DIR'] = '/tmp/yolo_config'
+    
+# Create the directory if it doesn't exist
+if not os.path.exists(os.environ['YOLO_CONFIG_DIR']):
+    os.makedirs(os.environ['YOLO_CONFIG_DIR'], exist_ok=True)
+
 # Create Flask app with correct template folder
 template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'app', 'templates'))
 static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'app', 'static'))

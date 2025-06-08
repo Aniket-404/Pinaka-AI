@@ -2,7 +2,7 @@ services:
   - type: web
     name: pinaka-ai
     runtime: python
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: chmod +x build.sh && ./build.sh
     startCommand: gunicorn --worker-class eventlet -w 1 wsgi:app
     plan: free
     envVars:
@@ -10,3 +10,5 @@ services:
         generateValue: true
       - key: RENDER
         value: true
+      - key: YOLO_CONFIG_DIR
+        value: /tmp/yolo_config
