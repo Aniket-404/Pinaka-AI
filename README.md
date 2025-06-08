@@ -13,6 +13,9 @@ Pinaka-AI is a production-ready, minimal, and clear object detection system usin
     - `scripts/master_script.py` — Single entry-point for full training pipeline
 - `docs/` — Documentation and guides
 
+> **Note:**
+> For full portability, all configuration files (such as `models/custom_dataset.yaml` and `training/config.yaml`) should use only relative paths (e.g., `path: .`). Do **not** use absolute paths. This ensures the project works on any machine after cloning.
+
 ## Installation
 1. **Clone the repository:**
    ```bash

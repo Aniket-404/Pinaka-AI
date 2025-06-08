@@ -1,6 +1,6 @@
 # Custom YOLO Dataset Configuration
-# Dataset root directory (absolute path)
-path: C:\Users\kambl\Desktop\Aniket\Degree\Main\BE\Final Year Project\Pinaka-AI
+# Dataset root directory (relative path for portability)
+path: .
 
 # Training and validation sets (relative to path)
 train: custom_dataset/images/train
