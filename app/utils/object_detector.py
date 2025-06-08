@@ -88,7 +88,8 @@ class ObjectDetector:
             
             # Update demo frame with error message
             self._create_demo_frame(f"Error: {str(e)[:50]}", False)
-      def _create_demo_frame(self, message="Demo Mode - Browser Camera", success=True):
+
+    def _create_demo_frame(self, message="Demo Mode - Browser Camera", success=True):
         """Create a demo frame with simulated detections for deployment"""
         # Create a base frame (black background)
         self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
