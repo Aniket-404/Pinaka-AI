@@ -313,35 +313,23 @@ function captureAndSendFrame() {
  */
 function processDetections(detections) {
     if (!elements.ctx || !elements.canvas) return;
-    
-    // Store detections for other uses
     state.lastDetections = detections;
-    
-    // Clear previous drawings
     elements.ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
-    
-    // Filter detections based on threshold
-    const significantDetections = detections.filter(d => d.confidence >= config.detectionThreshold);
-    
-    // Draw each detection
+    // Sort and limit to top 5 detections by confidence
+    const significantDetections = detections
+        .filter(d => d.confidence >= config.detectionThreshold)
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 5);
     significantDetections.forEach(detection => {
-        // Use socket.io to send a notification if confidence is high enough
         if (detection.confidence >= 0.5 && state.socket) {
-            // Take a snapshot of the current frame
             const snapshotCanvas = document.createElement('canvas');
             snapshotCanvas.width = elements.canvas.width;
             snapshotCanvas.height = elements.canvas.height;
             const snapshotCtx = snapshotCanvas.getContext('2d');
             snapshotCtx.drawImage(elements.video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
-            
-            // Convert to base64 for transmission
             const snapshotData = snapshotCanvas.toDataURL('image/jpeg', 0.7).split(',')[1];
-            
-            // Format time string
             const now = new Date();
             const timeString = now.toLocaleTimeString();
-            
-            // Send detection to server for notification
             state.socket.emit('detection_alert', {
                 object: detection.label,
                 confidence: detection.confidence,
@@ -350,77 +338,91 @@ function processDetections(detections) {
             });
         }
     });
-    
-    // Draw bounding boxes directly on canvas
     drawBoxes(significantDetections);
 }
 
-/**
- * Draw bounding boxes for detections
- */
 function drawBoxes(detections) {
     if (!elements.ctx || !elements.canvas) return;
-    
-    // Get the current video frame for drawing over
     elements.ctx.drawImage(elements.video, 0, 0, elements.canvas.width, elements.canvas.height);
-    
-    // Draw each detection
     detections.forEach(detection => {
-        // Use detection coordinates if available, otherwise calculate default position
         let x, y, width, height;
-        
-        if (detection.x1 !== undefined && detection.y1 !== undefined && 
-            detection.x2 !== undefined && detection.y2 !== undefined) {
-            // Use provided coordinates
+        if (detection.x1 !== undefined && detection.y1 !== undefined && detection.x2 !== undefined && detection.y2 !== undefined) {
             x = detection.x1;
             y = detection.y1;
             width = detection.x2 - detection.x1;
             height = detection.y2 - detection.y1;
         } else if (detection.width !== undefined && detection.height !== undefined) {
-            // Use width/height directly
             x = detection.x1 || 0;
             y = detection.y1 || 0;
             width = detection.width;
             height = detection.height;
         } else {
-            // Use default values - place a box in the center
             width = elements.canvas.width * 0.3;
             height = elements.canvas.height * 0.3;
             x = (elements.canvas.width - width) / 2;
             y = (elements.canvas.height - height) / 2;
         }
-        
-        // Choose color based on object class and model
         let color = config.colors.default;
         if (detection.model === 'custom') {
-            color = config.colors[detection.label] || '#FF9900'; // Orange for custom model
+            color = config.colors[detection.label] || '#FF9900';
         } else if (detection.model === 'coco') {
-            color = config.colors[detection.label] || '#3366FF'; // Blue for COCO model
+            color = config.colors[detection.label] || '#3366FF';
         } else {
             color = config.colors[detection.label] || config.colors.default;
         }
-        
-        // Draw bounding box
+        // Draw smooth rounded rectangle
+        elements.ctx.save();
         elements.ctx.strokeStyle = color;
         elements.ctx.lineWidth = 3;
-        elements.ctx.strokeRect(x, y, width, height);
-        
-        // Create background for text
+        roundRect(elements.ctx, x, y, width, height, 12);
+        elements.ctx.stroke();
+        elements.ctx.restore();
+        // Label background with shadow for clarity
         const modelInfo = detection.model ? ` (${detection.model})` : '';
         const text = `${detection.label}${modelInfo}: ${Math.round(detection.confidence * 100)}%`;
-        
-        // Measure text width for background
-        elements.ctx.font = '16px Arial';
+        elements.ctx.font = 'bold 16px Arial';
         const textWidth = elements.ctx.measureText(text).width;
-        
-        // Draw text background        elements.ctx.fillStyle = color;
-        elements.ctx.fillRect(x, y - 25, textWidth + 10, 25);
-        
-        // Draw text
-        elements.ctx.fillStyle = '#ffffff';
-        elements.ctx.fillText(text, x + 5, y - 7);
+        elements.ctx.save();
+        elements.ctx.globalAlpha = 0.7;
+        elements.ctx.fillStyle = color;
+        elements.ctx.shadowColor = '#222';
+        elements.ctx.shadowBlur = 6;
+        elements.ctx.fillRect(x, y - 30, textWidth + 16, 28);
+        elements.ctx.restore();
+        elements.ctx.save();
+        elements.ctx.fillStyle = '#fff';
+        elements.ctx.font = 'bold 16px Arial';
+        elements.ctx.fillText(text, x + 8, y - 10);
+        elements.ctx.restore();
     });
 }
+
+// Draws a rounded rectangle
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+// --- Camera persistence across navigation ---
+// Use sessionStorage to remember if camera should be running
+window.addEventListener('beforeunload', function() {
+    sessionStorage.setItem('cameraShouldRun', state.streaming ? '1' : '0');
+});
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-restart camera if it was running before navigation
+    if (sessionStorage.getItem('cameraShouldRun') === '1' && elements.startButton) {
+        elements.startButton.click();
+    }
+});
 
 /**
  * Set up Socket.IO connection
