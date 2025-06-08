@@ -124,15 +124,55 @@
                     {% endif %}
                     <div class="form-text">Enter comma-separated list of object classes to monitor</div>
                     
-                    {% if available_classes %}
+                {% if available_classes %}
                         <div class="mt-3">
                             <label class="form-label">Available Object Classes</label>
                             <p class="form-text">Click on classes to add/remove them from monitoring:</p>
-                            <div class="classes-container">
-                                {% for class_name in available_classes|sort %}
-                                    <span class="class-tag" data-class="{{ class_name }}">{{ class_name }}</span>
-                                {% endfor %}
-                            </div>
+                            
+                            <!-- Organized by model type -->
+                            {% if model_classes %}
+                                <div class="mb-3">
+                                    {% if model_classes.custom %}
+                                        <div class="mb-2">
+                                            <h6 class="text-primary">Custom Model Classes:</h6>
+                                            <div class="classes-container">
+                                                {% for class_name in model_classes.custom %}
+                                                    <span class="class-tag" data-class="{{ class_name }}">{{ class_name }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if model_classes.coco %}
+                                        <div class="mb-2">
+                                            <h6 class="text-primary">COCO Model Classes:</h6>
+                                            <div class="classes-container">
+                                                {% for class_name in model_classes.coco %}
+                                                    <span class="class-tag" data-class="{{ class_name }}">{{ class_name }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if model_classes.special %}
+                                        <div class="mb-2">
+                                            <h6 class="text-primary">Special Detection Classes:</h6>
+                                            <div class="classes-container">
+                                                {% for class_name in model_classes.special %}
+                                                    <span class="class-tag" data-class="{{ class_name }}">{{ class_name }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <!-- Fallback to flat list if not organized by model -->
+                                <div class="classes-container">
+                                    {% for class_name in available_classes %}
+                                        <span class="class-tag" data-class="{{ class_name }}">{{ class_name }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
                         </div>
                     {% endif %}
                 </div>

@@ -15,19 +15,15 @@ class ObjectDetector:
     def __init__(self, model_path="yolov8n.pt", socketio=None, use_fallback=False):
         self.model_loaded = False
         self.socketio = socketio
-        self.demo_mode = IS_PRODUCTION
+        self.demo_mode = False  # Changed: don't default to demo mode even in production
         self.last_notification_time = {}  # For tracking notification cooldowns
         self.yolo_available = False
+        self.last_detections = []  # Store detailed detection info
         
         # Generate demo frame with some sample detections
         self._create_demo_frame()
         
-        # In production, we'll use the demo mode by default
-        if IS_PRODUCTION:
-            print("Running in production environment, using demo mode")
-            return
-            
-        # Skip actual model loading if using fallback or YOLO not available
+        # Skip actual model loading if using fallback
         if use_fallback:
             print("Using fallback detection mode")
             return
@@ -113,16 +109,15 @@ class ObjectDetector:
         
         # Draw some random objects with bounding boxes to simulate detections
         objects = ["person", "car", "stone", "gas_cylinder"]
-        for i in range(3):
-            # Randomize the position and size of the "detected" object
+        for i in range(3):            # Randomize the position and size of the "detected" object
             x = random.randint(50, 500)
             y = random.randint(100, 350)
             w = random.randint(50, 150)
             h = random.randint(50, 150)
-            
             # Randomly select an object and color
             obj = random.choice(objects)
-            color = random.choice(colors)                # Draw the bounding box and label
+            color = random.choice(colors)
+            # Draw the bounding box and label
             cv2.rectangle(self.demo_frame, (x, y), (x+w, y+h), color, 2)
             conf = random.uniform(0.5, 0.95)
             cv2.putText(self.demo_frame, f"{obj} {conf:.2f}", 
@@ -131,10 +126,11 @@ class ObjectDetector:
     def _process_frame(self, frame, config):
         """Process a single frame with detection"""
         detected_objects = []
+        self.last_detections = []  # Reset detection info
         current_time = time.time()
         
-        # In demo mode or production, use simulated detections
-        if IS_PRODUCTION or self.demo_mode:
+        # Use simulated detections in demo mode
+        if self.demo_mode:
             # Update the demo frame
             if hasattr(self, 'frame_counter'):
                 self.frame_counter += 1
@@ -150,13 +146,30 @@ class ObjectDetector:
             for obj in config.monitored_objects:
                 if random.random() > 0.7:  # 30% chance to "detect" each monitored object
                     confidence = random.uniform(0.6, 0.95)
+                    
+                    # Create random bounding box
+                    x1 = random.randint(50, frame.shape[1] - 150)
+                    y1 = random.randint(50, frame.shape[0] - 150)
+                    width = random.randint(50, 150)
+                    height = random.randint(50, 150)
+                    x2 = x1 + width
+                    y2 = y1 + height
+                    
+                    # Store detection with coordinates
+                    detected_object = (obj, confidence, x1, y1, x2, y2)
                     objects.append((obj, confidence))
+                    self.last_detections.append(detected_object)
+                    
+                    # Draw bounding box
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(frame, f"{obj} {confidence:.2f}", (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     
                     # Randomly create a notification
                     if confidence > config.notification_threshold and random.random() > 0.9:
-                        self._send_notification(self.demo_frame, obj, confidence, current_time, config)
+                        self._send_notification(frame, obj, confidence, current_time, config, x1, y1, x2, y2)
             
-            return self.demo_frame, objects
+            return frame, objects
         
         # Regular model-based detection
         if self.model_loaded:
@@ -171,29 +184,30 @@ class ObjectDetector:
                     class_id = int(box.cls[0])
                     label = result.names[class_id]  # Class name
                     
+                    # Store full detection information
+                    self.last_detections.append((label, confidence, x1, y1, x2, y2))
+                    
+                    # Always add the detection to the list, but only draw/notify if it meets the threshold
+                    detected_objects.append((label, confidence))
+                    
                     # Check if object should be monitored
                     if label in config.monitored_objects and confidence >= config.notification_threshold:
                         # Draw bounding box
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                         cv2.putText(frame, f"{label} {confidence:.2f}", (x1, y1 - 10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                        
-                        detected_objects.append((label, confidence))
-                        
-                        # Send notification if cooldown period has passed
+                          # Send notification if cooldown period has passed
                         self._send_notification(frame, label, confidence, current_time, config, x1, y1, x2, y2)
-        else:
-            # Simple detection - just add a message to the frame
-            cv2.putText(frame, "Model not loaded - using simplified detection", 
-                       (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            
-            # Draw some fake detections
+        else:        # Simple detection using motion detection as a fallback
             self._add_simulated_detections(frame, config, detected_objects, current_time)
                 
         return frame, detected_objects
     
     def _add_simulated_detections(self, frame, config, detected_objects, current_time):
-        """Add simulated detections when real model is not available"""
+        """Add simulated detections when real model is not available"""        # Add a message to the frame
+        cv2.putText(frame, "Using motion detection fallback", 
+                   (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
         # Use motion detection as a fallback
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (21, 21), 0)
@@ -223,19 +237,21 @@ class ObjectDetector:
             # Compute the bounding box for the contour
             (x, y, w, h) = cv2.boundingRect(c)
             
-            # Draw a rectangle around the contour
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            
-            # Add "Movement" detection
+            # Add "Movement" detection with coordinates
             label = "Movement"
             confidence = 0.7  # Fake confidence
+            
+            # Store full detection information
+            self.last_detections.append((label, confidence, x, y, x + w, y + h))
+            detected_objects.append((label, confidence))
+            
+            # Draw a rectangle around the contour
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
             
             # Check if this object should be monitored
             if label in config.monitored_objects and confidence >= config.notification_threshold:
                 cv2.putText(frame, f"{label} {confidence:.2f}", (x, y - 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                
-                detected_objects.append((label, confidence))
                 
                 # Send notification if cooldown period has passed
                 self._send_notification(frame, label, confidence, current_time, config, x, y, x + w, y + h)

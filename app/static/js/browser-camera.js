@@ -282,7 +282,21 @@ function captureAndSendFrame() {
     .then(data => {
         if (data.error) {
             console.error('Detection error:', data.error);
+            updateStatus('Detection error: ' + data.error);
             return;
+        }
+        
+        // Log the detection data for debugging (only first few to avoid console spam)
+        if (data.detections && data.detections.length > 0) {
+            console.log(`Received ${data.detections.length} detections:`, 
+                       data.detections.slice(0, 3));
+            
+            // Update status
+            if (data.detections.length > 0) {
+                updateStatus(`Active detection: ${data.detections.length} objects found`);
+            } else {
+                updateStatus('Camera active - no objects detected');
+            }
         }
         
         // Process and display detection results
@@ -290,6 +304,7 @@ function captureAndSendFrame() {
     })
     .catch(error => {
         console.error('Error sending frame to server:', error);
+        updateStatus('Connection error - check console');
     });
 }
 
@@ -351,15 +366,39 @@ function drawBoxes(detections) {
     
     // Draw each detection
     detections.forEach(detection => {
-        // Calculate box parameters based on relative positions
-        // This will need to be adjusted based on the actual detection data format
-        const x = 10;
-        const y = 10;
-        const width = elements.canvas.width - 20;
-        const height = elements.canvas.height - 20;
+        // Use detection coordinates if available, otherwise calculate default position
+        let x, y, width, height;
         
-        // Choose color based on object class
-        const color = config.colors[detection.label] || config.colors.default;
+        if (detection.x1 !== undefined && detection.y1 !== undefined && 
+            detection.x2 !== undefined && detection.y2 !== undefined) {
+            // Use provided coordinates
+            x = detection.x1;
+            y = detection.y1;
+            width = detection.x2 - detection.x1;
+            height = detection.y2 - detection.y1;
+        } else if (detection.width !== undefined && detection.height !== undefined) {
+            // Use width/height directly
+            x = detection.x1 || 0;
+            y = detection.y1 || 0;
+            width = detection.width;
+            height = detection.height;
+        } else {
+            // Use default values - place a box in the center
+            width = elements.canvas.width * 0.3;
+            height = elements.canvas.height * 0.3;
+            x = (elements.canvas.width - width) / 2;
+            y = (elements.canvas.height - height) / 2;
+        }
+        
+        // Choose color based on object class and model
+        let color = config.colors.default;
+        if (detection.model === 'custom') {
+            color = config.colors[detection.label] || '#FF9900'; // Orange for custom model
+        } else if (detection.model === 'coco') {
+            color = config.colors[detection.label] || '#3366FF'; // Blue for COCO model
+        } else {
+            color = config.colors[detection.label] || config.colors.default;
+        }
         
         // Draw bounding box
         elements.ctx.strokeStyle = color;
@@ -367,14 +406,18 @@ function drawBoxes(detections) {
         elements.ctx.strokeRect(x, y, width, height);
         
         // Create background for text
-        const text = `${detection.label}: ${Math.round(detection.confidence * 100)}%`;
+        const modelInfo = detection.model ? ` (${detection.model})` : '';
+        const text = `${detection.label}${modelInfo}: ${Math.round(detection.confidence * 100)}%`;
+        
+        // Measure text width for background
+        elements.ctx.font = '16px Arial';
         const textWidth = elements.ctx.measureText(text).width;
-        elements.ctx.fillStyle = color;
+        
+        // Draw text background        elements.ctx.fillStyle = color;
         elements.ctx.fillRect(x, y - 25, textWidth + 10, 25);
         
         // Draw text
         elements.ctx.fillStyle = '#ffffff';
-        elements.ctx.font = '16px Arial';
         elements.ctx.fillText(text, x + 5, y - 7);
     });
 }

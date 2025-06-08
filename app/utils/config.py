@@ -11,4 +11,3 @@ class Config:
         self.notification_threshold = 0.7  # Default confidence threshold
         self.notification_cooldown = 10  # Seconds between notifications for the same object
         self.last_notification_time = {}  # Track last notification time for each object type
-        self.selected_model = "custom"  # 'custom' or 'coco'

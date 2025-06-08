@@ -69,28 +69,31 @@ def initialize_model(model_path, name="model", max_retries=2, retry_delay=2):
     print(f"All attempts to load {name} failed, using fallback")
     return ObjectDetector(use_fallback=True)
 
-# If in production mode, use simplified demo detectors
-if is_production:
-    print("Running in production mode, using simplified detectors")
-    custom_detector = ObjectDetector(use_fallback=True)
-    coco_detector = ObjectDetector(use_fallback=True)
-else:
-    # In development mode, try to load the actual models with retry logic
-    custom_detector = initialize_model(custom_model_path, "custom model")
-    coco_detector = initialize_model(coco_model_path, "COCO model")
+# Always try to load the actual models with retry logic
+custom_detector = initialize_model(custom_model_path, "custom model")
+coco_detector = initialize_model(coco_model_path, "COCO model")
 
 # Config for detection settings
 config = Config()
 
-# Helper to get the active detector
-
-def get_active_detector():
-    if config.selected_model == "custom" and custom_detector and custom_detector.model_loaded:
-        return custom_detector
-    elif config.selected_model == "coco" and coco_detector and coco_detector.model_loaded:
-        return coco_detector
-    # fallback
-    return custom_detector if custom_detector and custom_detector.model_loaded else coco_detector
+# Helper to get the active detector - now returns both if available
+def get_active_detectors():
+    detectors = []
+    
+    # Always use both models if available
+    if custom_detector and custom_detector.model_loaded:
+        detectors.append(custom_detector)
+    if coco_detector and coco_detector.model_loaded:
+        detectors.append(coco_detector)
+    
+    # If neither is available, return whichever is initialized
+    if not detectors:
+        if custom_detector:
+            detectors.append(custom_detector)
+        if coco_detector:
+            detectors.append(coco_detector)
+    
+    return detectors
 
 @app.route('/health')
 def health_check():
@@ -106,11 +109,11 @@ def health_check():
         "time": time.strftime("%Y-%m-%d %H:%M:%S"),
         "custom_model": {
             "loaded": custom_detector.model_loaded if custom_detector else False,
-            "demo_mode": hasattr(custom_detector, 'demo_mode') and custom_detector.demo_mode if custom_detector else True,
+            "available_classes": list(custom_detector.model.names.values()) if custom_detector and custom_detector.model_loaded and hasattr(custom_detector.model, 'names') else []
         },
         "coco_model": {
             "loaded": coco_detector.model_loaded if coco_detector else False,
-            "demo_mode": hasattr(coco_detector, 'demo_mode') and coco_detector.demo_mode if coco_detector else True,
+            "available_classes": list(coco_detector.model.names.values()) if coco_detector and coco_detector.model_loaded and hasattr(coco_detector.model, 'names') else []
         },
         "system": {
             "python": platform.python_version(),
@@ -123,7 +126,7 @@ def health_check():
             "ultralytics_cache": os.environ.get('ULTRALYTICS_NO_CACHE', 'not set'),
             "yolo_config_dir": os.environ.get('YOLO_CONFIG_DIR', 'not set'),
         },
-        "version": "1.1.0"
+        "version": "1.2.0"
     }
     return jsonify(status)
 
@@ -141,36 +144,51 @@ def index():
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     form = NotificationForm()
-    # Collect available classes from both models
-    available_classes = set()
-    # Try to get from custom model
+    
+    # Create model class information for display
+    available_classes = {}
+    
+    # Get classes from custom model
     if custom_detector and hasattr(custom_detector, 'model_loaded') and custom_detector.model_loaded:
         if hasattr(custom_detector, 'model') and hasattr(custom_detector.model, 'names'):
-            available_classes.update(list(custom_detector.model.names.values()))
-    # Try to get from coco model
+            custom_classes = list(custom_detector.model.names.values())
+            available_classes['custom'] = sorted(custom_classes)
+    
+    # Get classes from COCO model
     if coco_detector and hasattr(coco_detector, 'model_loaded') and coco_detector.model_loaded:
         if hasattr(coco_detector, 'model') and hasattr(coco_detector.model, 'names'):
-            available_classes.update(list(coco_detector.model.names.values()))
-    # Always add Movement and custom classes
-    available_classes.add("Movement")
-    for custom_class in ["stone", "gas_cylinder"]:
-        available_classes.add(custom_class)
+            coco_classes = list(coco_detector.model.names.values())
+            available_classes['coco'] = sorted(coco_classes)
+    
+    # Add special classes
+    special_classes = ["Movement", "stone", "gas_cylinder"]
+    available_classes['special'] = special_classes
+    
+    # Combine all classes for the flat view
+    all_classes = set()
+    for class_group in available_classes.values():
+        all_classes.update(class_group)
+    
     # Fallback: if still empty, provide a default set
-    if not available_classes:
-        available_classes = set(["person", "car", "dog", "cat", "Movement", "stone", "gas_cylinder"])
-    available_classes = sorted(available_classes)
+    if not all_classes:
+        all_classes = set(["person", "car", "dog", "cat", "Movement", "stone", "gas_cylinder"])
+    
+    # Sort classes for display
+    all_classes = sorted(all_classes)
 
     if form.validate_on_submit():
         config.monitored_objects = [c.strip() for c in form.monitored_objects.data.split(',') if c.strip()]
         config.notification_threshold = form.confidence_threshold.data
-        config.selected_model = form.selected_model.data
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('index'))
+    
     if not form.is_submitted():
         form.monitored_objects.data = ','.join(config.monitored_objects)
         form.confidence_threshold.data = config.notification_threshold
-        form.selected_model.data = config.selected_model
-    return render_template('settings.html', form=form, available_classes=available_classes)
+    
+    return render_template('settings.html', form=form, 
+                          available_classes=all_classes, 
+                          model_classes=available_classes)
 
 @app.route('/detect_frame', methods=['POST'])
 def detect_frame():
@@ -185,14 +203,94 @@ def detect_frame():
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if frame is None:
             return jsonify({'error': 'Invalid image data'}), 400
-        # Run both detectors
+        
+        # Run both detectors regardless of selected model in settings
         results = []
+        
+        # Always use custom detector if available
         if custom_detector and custom_detector.model_loaded:
-            _, detected_custom = custom_detector._process_frame(frame.copy(), config)
-            results.extend([{'label': label, 'confidence': float(conf)} for label, conf in detected_custom])
+            # Get processed frame and detected objects
+            processed_frame, detected_custom = custom_detector._process_frame(frame.copy(), config)
+            
+            # Extract the full detection information
+            custom_results = []
+            # Look for detection boxes in the processed frame or objects list
+            if hasattr(custom_detector, 'last_detections') and custom_detector.last_detections:
+                for det in custom_detector.last_detections:
+                    if isinstance(det, tuple) and len(det) >= 6:  # Full detection with coordinates
+                        label, conf, x1, y1, x2, y2 = det
+                        custom_results.append({
+                            'label': label,
+                            'confidence': float(conf),
+                            'x1': int(x1),
+                            'y1': int(y1),
+                            'x2': int(x2),
+                            'y2': int(y2),
+                            'width': int(x2 - x1),
+                            'height': int(y2 - y1),
+                            'model': 'custom'
+                        })
+                    elif isinstance(det, tuple) and len(det) == 2:  # Just label and confidence
+                        label, conf = det
+                        custom_results.append({
+                            'label': label,
+                            'confidence': float(conf),
+                            'model': 'custom'
+                        })
+            else:
+                # Fallback to just label and confidence pairs
+                for label, conf in detected_custom:
+                    custom_results.append({
+                        'label': label,
+                        'confidence': float(conf),
+                        'model': 'custom'
+                    })
+            
+            # Add to combined results
+            results.extend(custom_results)
+            
+        # Always use COCO detector if available
         if coco_detector and coco_detector.model_loaded:
-            _, detected_coco = coco_detector._process_frame(frame.copy(), config)
-            results.extend([{'label': label, 'confidence': float(conf)} for label, conf in detected_coco])
+            # Get processed frame and detected objects
+            processed_frame, detected_coco = coco_detector._process_frame(frame.copy(), config)
+            
+            # Extract the full detection information
+            coco_results = []
+            # Look for detection boxes in the processed frame or objects list
+            if hasattr(coco_detector, 'last_detections') and coco_detector.last_detections:
+                for det in coco_detector.last_detections:
+                    if isinstance(det, tuple) and len(det) >= 6:  # Full detection with coordinates
+                        label, conf, x1, y1, x2, y2 = det
+                        coco_results.append({
+                            'label': label,
+                            'confidence': float(conf),
+                            'x1': int(x1),
+                            'y1': int(y1),
+                            'x2': int(x2),
+                            'y2': int(y2),
+                            'width': int(x2 - x1),
+                            'height': int(y2 - y1),
+                            'model': 'coco'
+                        })
+                    elif isinstance(det, tuple) and len(det) == 2:  # Just label and confidence
+                        label, conf = det
+                        coco_results.append({
+                            'label': label,
+                            'confidence': float(conf),
+                            'model': 'coco'
+                        })
+            else:
+                # Fallback to just label and confidence pairs
+                for label, conf in detected_coco:
+                    coco_results.append({
+                        'label': label,
+                        'confidence': float(conf),
+                        'model': 'coco'
+                    })
+            
+            # Add to combined results
+            results.extend(coco_results)
+        
         return jsonify({'detections': results})
     except Exception as e:
         print(f"Error in detect_frame: {e}")
