@@ -11,12 +11,16 @@ import random
 # Check if we're in production mode
 IS_PRODUCTION = os.environ.get('RENDER', False)
 
+# Define a global variable to track YOLO availability
+YOLO_AVAILABLE = False
+
 # Only import YOLO/torch in development mode or if explicitly requested
 if not IS_PRODUCTION:
     try:
         import torch
         from ultralytics import YOLO
         YOLO_AVAILABLE = True
+        print("Successfully imported YOLO libraries")
     except Exception as e:
         print(f"Error importing YOLO: {e}")
         YOLO_AVAILABLE = False
@@ -70,28 +74,41 @@ class ObjectDetector:
                 return
             
             # Import YOLO here if we're actually going to use it
-            if IS_PRODUCTION and not 'YOLO' in globals():
+            if IS_PRODUCTION:
                 try:
+                    # In production, we need to explicitly import these
                     import torch
-                    from ultralytics import YOLO
+                    from ultralytics import YOLO as YOLOClass
+                    # Create a reference to the class with the same name expected elsewhere
+                    globals()['YOLO'] = YOLOClass
                 except Exception as e:
                     print(f"Error importing YOLO in production: {e}")
                     self.demo_mode = True
                     return
-            
-            # Load the model
+              # Load the model
             print(f"Loading model from: {model_path}")
-            self.model = YOLO(model_path)
-            self.model_loaded = True
-            
-            # Print available classes for this model
-            if hasattr(self.model, 'names'):
-                print(f"Model loaded with classes: {list(self.model.names.values())}")
+            try:
+                # Make sure YOLO is available in the current scope
+                if 'YOLO' in globals():
+                    self.model = YOLO(model_path)
+                    self.model_loaded = True
+                    
+                    # Print available classes for this model
+                    if hasattr(self.model, 'names'):
+                        print(f"Model loaded with classes: {list(self.model.names.values())}")
+                        
+                        # Update demo frame with success message
+                        self._create_demo_frame(f"Model loaded: {os.path.basename(model_path)}", True)
+                    else:
+                        print("Model loaded but class names not available")
+                else:
+                    raise ImportError("YOLO class not available in the current scope")
+            except Exception as e:
+                print(f"Error loading YOLO model: {e}")
+                print("Will fall back to a simplified detection method")
                 
-                # Update demo frame with success message
-                self._create_demo_frame(f"Model loaded: {os.path.basename(model_path)}", True)
-            else:
-                print("Model loaded but class names not available")
+                # Update demo frame with error message
+                self._create_demo_frame(f"Error: {str(e)[:50]}", False)
                 
         except Exception as e:
             print(f"Error loading YOLO model: {e}")
