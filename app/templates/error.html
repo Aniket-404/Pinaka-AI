@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Pinaka AI - Error{% endblock %}
+
+{% block head %}
+<style>
+    .error-container {
+        padding: 2rem;
+        border-radius: 8px;
+        background-color: var(--card-background);
+        border: 1px solid var(--border-color);
+        margin: 2rem auto;
+        max-width: 800px;
+    }
+
+    .error-title {
+        color: #dc3545;
+        font-size: 1.8rem;
+        margin-bottom: 1rem;
+    }
+
+    .error-message {
+        font-size: 1.2rem;
+        margin-bottom: 1.5rem;
+        color: var(--text-primary);
+    }
+
+    .error-details {
+        background-color: rgba(0, 0, 0, 0.05);
+        padding: 1rem;
+        border-radius: 6px;
+        font-family: monospace;
+        white-space: pre-wrap;
+        overflow-x: auto;
+        color: var(--text-secondary);
+    }
+
+    .action-links {
+        margin-top: 2rem;
+        display: flex;
+        gap: 1rem;
+    }
+
+    .back-link {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        background-color: var(--primary-color);
+        color: white;
+        border-radius: 6px;
+        text-decoration: none;
+        transition: background-color 0.2s;
+    }
+
+    .back-link:hover {
+        background-color: var(--primary-dark);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <h1 class="error-title">An Error Occurred</h1>
+    
+    <div class="error-message">
+        {{ error }}
+    </div>
+    
+    {% if details %}
+    <div class="error-details">
+        {{ details }}
+    </div>
+    {% endif %}
+    
+    <div class="action-links">
+        <a href="{{ url_for('index') }}" class="back-link">Return to Home</a>
+    </div>
+</div>
+{% endblock %}

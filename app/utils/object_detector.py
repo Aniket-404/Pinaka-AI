@@ -11,24 +11,6 @@ import random
 # Check if we're in production mode
 IS_PRODUCTION = os.environ.get('RENDER', False)
 
-# Define a global variable to track YOLO availability
-YOLO_AVAILABLE = False
-
-# Only import YOLO/torch in development mode or if explicitly requested
-if not IS_PRODUCTION:
-    try:
-        import torch
-        from ultralytics import YOLO
-        YOLO_AVAILABLE = True
-        print("Successfully imported YOLO libraries")
-    except Exception as e:
-        print(f"Error importing YOLO: {e}")
-        YOLO_AVAILABLE = False
-else:
-    # In production, don't even try to import unless explicitly needed
-    YOLO_AVAILABLE = False
-    print("Running in production mode - YOLO imports disabled by default")
-
 class ObjectDetector:
     def __init__(self, model_path="yolov8n.pt", camera_id=0, socketio=None, use_fallback=False):
         self.model_loaded = False
@@ -37,6 +19,7 @@ class ObjectDetector:
         self.cap = None
         self.demo_mode = IS_PRODUCTION
         self.last_notification_time = {}  # For tracking notification cooldowns
+        self.yolo_available = False
         
         # Generate demo frame with some sample detections
         self._create_demo_frame()
@@ -47,11 +30,20 @@ class ObjectDetector:
             return
             
         # Skip actual model loading if using fallback or YOLO not available
-        if use_fallback or not YOLO_AVAILABLE:
+        if use_fallback:
             print("Using fallback detection mode")
             return
-            
         try:
+            # Try importing YOLO if not already imported
+            try:
+                import torch
+                from ultralytics import YOLO
+                self.yolo_available = True
+                print("YOLO import successful in ObjectDetector")
+            except Exception as e:
+                print(f"Error importing YOLO: {e}")
+                self.yolo_available = False
+            
             # Model loading (only in development mode)
             model_locations = [
                 model_path,  # Original path
@@ -73,46 +65,27 @@ class ObjectDetector:
                 self.demo_mode = True
                 return
             
-            # Import YOLO here if we're actually going to use it
-            if IS_PRODUCTION:
-                try:
-                    # In production, we need to explicitly import these
-                    import torch
-                    from ultralytics import YOLO as YOLOClass
-                    # Create a reference to the class with the same name expected elsewhere
-                    globals()['YOLO'] = YOLOClass
-                except Exception as e:
-                    print(f"Error importing YOLO in production: {e}")
-                    self.demo_mode = True
-                    return
-              # Load the model
+            if not self.yolo_available:
+                print("YOLO is not available, cannot load model")
+                raise ImportError("YOLO is not available in the current environment")
+            
+            # Load the model
             print(f"Loading model from: {model_path}")
-            try:
-                # Make sure YOLO is available in the current scope
-                if 'YOLO' in globals():
-                    self.model = YOLO(model_path)
-                    self.model_loaded = True
-                    
-                    # Print available classes for this model
-                    if hasattr(self.model, 'names'):
-                        print(f"Model loaded with classes: {list(self.model.names.values())}")
-                        
-                        # Update demo frame with success message
-                        self._create_demo_frame(f"Model loaded: {os.path.basename(model_path)}", True)
-                    else:
-                        print("Model loaded but class names not available")
-                else:
-                    raise ImportError("YOLO class not available in the current scope")
-            except Exception as e:
-                print(f"Error loading YOLO model: {e}")
-                print("Will fall back to a simplified detection method")
+            self.model = YOLO(model_path)
+            self.model_loaded = True
+            
+            # Print available classes for this model
+            if hasattr(self.model, 'names'):
+                print(f"Model loaded with classes: {list(self.model.names.values())}")
                 
-                # Update demo frame with error message
-                self._create_demo_frame(f"Error: {str(e)[:50]}", False)
-                
+                # Update demo frame with success message
+                self._create_demo_frame(f"Model loaded: {os.path.basename(model_path)}", True)
+            else:
+                print("Model loaded but class names not available")
         except Exception as e:
             print(f"Error loading YOLO model: {e}")
             print("Will fall back to a simplified detection method")
+            self.model_loaded = False
             
             # Update demo frame with error message
             self._create_demo_frame(f"Error: {str(e)[:50]}", False)
