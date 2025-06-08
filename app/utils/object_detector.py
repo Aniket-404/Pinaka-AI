@@ -325,12 +325,17 @@ class ObjectDetector:
                 
             # Convert to base64
             jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+              # Format timestamp as readable time
+            import datetime
+            readable_time = datetime.datetime.fromtimestamp(current_time).strftime('%H:%M:%S')
             
             # Send the notification
             self.socketio.emit('detection_alert', {
                 'object': label,
                 'confidence': float(confidence),
+                'time': readable_time,
                 'timestamp': current_time,
+                'coordinates': {'x1': int(x1), 'y1': int(y1), 'x2': int(x2), 'y2': int(y2)},
                 'image': jpg_as_text
             })
             

@@ -98,9 +98,7 @@
         object-fit: cover;
         border-radius: 6px;
         margin: 0.5rem 0;
-    }
-
-    .notification-confidence {
+    }    .notification-confidence {
         display: inline-block;
         padding: 0.25rem 0.75rem;
         background-color: #e0f2fe;
@@ -108,6 +106,14 @@
         border-radius: 4px;
         font-size: 0.875rem;
         font-weight: 500;
+    }
+    
+    .notification-coords {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        margin: 0.25rem 0;
+        padding: 0 0.5rem;
+        font-family: monospace;
     }
 
     .clear-notifications {
@@ -293,11 +299,16 @@
         const socket = io();
         
         // Handle detection alerts
-        socket.on('detection_alert', function(data) {
-            // Create browser notification if permission granted
+        socket.on('detection_alert', function(data) {            // Create browser notification if permission granted
             if ('Notification' in window && Notification.permission === 'granted') {
+                // Prepare notification body with coordinates if available
+                let notificationBody = `Confidence: ${(data.confidence * 100).toFixed(1)}% at ${data.time || 'Now'}`;
+                if (data.coordinates) {
+                    notificationBody += `\nLocation: (${data.coordinates.x1},${data.coordinates.y1}) to (${data.coordinates.x2},${data.coordinates.y2})`;
+                }
+                
                 const notification = new Notification('Object Detected: ' + data.object, {
-                    body: `Confidence: ${(data.confidence * 100).toFixed(1)}% at ${data.time}`,
+                    body: notificationBody,
                     icon: 'data:image/jpeg;base64,' + data.image
                 });
                 
@@ -322,16 +333,25 @@
             
             // Hide the "no notifications" message
             noNotifications.style.display = 'none';
-            
-            // Create notification card
+              // Create notification card
             const card = document.createElement('div');
             card.className = 'notification-card new';
+            
+            // Format coordinates if available
+            let coordsText = '';
+            if (data.coordinates) {
+                coordsText = `<div class="notification-coords">
+                    Location: (${data.coordinates.x1},${data.coordinates.y1}) to (${data.coordinates.x2},${data.coordinates.y2})
+                </div>`;
+            }
+            
             card.innerHTML = `
                 <div class="notification-header">
                     <span class="notification-title">${data.object}</span>
-                    <span class="notification-time">${data.time}</span>
+                    <span class="notification-time">${data.time || 'Now'}</span>
                 </div>
                 <img src="data:image/jpeg;base64,${data.image}" class="notification-image" alt="${data.object}">
+                ${coordsText}
                 <div class="text-end">
                     <span class="notification-confidence">${(data.confidence * 100).toFixed(1)}% confidence</span>
                 </div>
