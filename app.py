@@ -90,29 +90,47 @@ def settings():
 
 @app.route('/video_feed')
 def video_feed():
+    # Check if we're in a production environment (like Render)
+    is_production = os.environ.get('RENDER', False)
+    
     # Run both detectors and merge results
     def generate_frames():
         while True:
             frame = None
             detected_objects = []
-            # Get frame from camera (use custom_detector's camera logic)
+            
+            # Get frame from camera or demo mode
             if custom_detector and custom_detector.model_loaded:
                 custom_detector._ensure_camera_open()
-                ret, frame = custom_detector.cap.read()
+                # Check if we're in demo mode
+                if hasattr(custom_detector, 'demo_mode') and custom_detector.demo_mode:
+                    frame = custom_detector.demo_frame.copy()
+                    ret = True
+                else:
+                    ret, frame = custom_detector.cap.read()
             elif coco_detector and coco_detector.model_loaded:
                 coco_detector._ensure_camera_open()
-                ret, frame = coco_detector.cap.read()
+                # Check if we're in demo mode
+                if hasattr(coco_detector, 'demo_mode') and coco_detector.demo_mode:
+                    frame = coco_detector.demo_frame.copy()
+                    ret = True
+                else:
+                    ret, frame = coco_detector.cap.read()
             else:
                 break
+                
             if not ret or frame is None:
                 break
+                
             # Run both detectors on the same frame
             frame_custom, detected_custom = (frame, [])
             frame_coco, detected_coco = (frame, [])
+            
             if custom_detector and custom_detector.model_loaded:
                 frame_custom, detected_custom = custom_detector._process_frame(frame.copy(), config)
             if coco_detector and coco_detector.model_loaded:
                 frame_coco, detected_coco = coco_detector._process_frame(frame.copy(), config)
+                
             # Overlay both results (custom first, then coco)
             # For simplicity, show custom detections on frame
             # Optionally, you could merge bounding boxes from both
@@ -121,11 +139,18 @@ def video_feed():
                 out_frame = frame_custom
             else:
                 out_frame = frame_coco
+                
             # Encode and yield
             ret, buffer = cv2.imencode('.jpg', out_frame)
             if not ret:
                 continue
+                
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            
+            # If in demo mode, add a small delay to simulate video
+            if is_production or (hasattr(custom_detector, 'demo_mode') and custom_detector.demo_mode):
+                time.sleep(0.1)
+                
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @socketio.on('connect')
@@ -137,4 +162,9 @@ def handle_disconnect():
     print('Client disconnected')
 
 if __name__ == '__main__':
+    # Use this for local development
     socketio.run(app, debug=True)
+    
+# This is needed for Render deployment with gunicorn
+# The application variable for gunicorn to use
+application = app

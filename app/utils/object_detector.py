@@ -5,6 +5,7 @@ import base64
 import os
 import sys
 import urllib.request
+import numpy as np
 from ultralytics import YOLO
 
 class ObjectDetector:
@@ -51,16 +52,41 @@ class ObjectDetector:
     def _ensure_camera_open(self):
         """Ensure the camera is open, attempt to reopen if closed"""
         if self.cap is None or not self.cap.isOpened():
-            # Try DroidCam first (usually device 1 or 2)
-            for device_id in [1, 2, 0]:  # Try DroidCam devices first, then fallback to default
-                self.cap = cv2.VideoCapture(device_id)
-                if self.cap.isOpened():
-                    print(f"Successfully opened camera device {device_id}")
-                    break
-                self.cap.release()
+            # Check if we're in a production environment (like Render)
+            is_production = os.environ.get('RENDER', False)
             
-            if not self.cap.isOpened():
-                raise RuntimeError(f"Could not open any camera device. Please ensure DroidCam is running and connected.")
+            if is_production:
+                # In production, use a demo video or image instead of camera
+                print("Running in production environment, using demo mode")
+                # Create a black image as fallback
+                self.cap = cv2.VideoCapture()
+                self.demo_mode = True
+                self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(self.demo_frame, "Camera not available in web deployment", (50, 240), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                cv2.putText(self.demo_frame, "Please run locally for camera access", (70, 280), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                return
+            else:
+                # In local development, try to access camera
+                # Try DroidCam first (usually device 1 or 2)
+                for device_id in [1, 2, 0]:  # Try DroidCam devices first, then fallback to default
+                    self.cap = cv2.VideoCapture(device_id)
+                    if self.cap.isOpened():
+                        print(f"Successfully opened camera device {device_id}")
+                        self.demo_mode = False
+                        break
+                    self.cap.release()
+                
+                if not self.cap.isOpened():
+                    print("Could not open any camera device. Using demo mode.")
+                    self.cap = cv2.VideoCapture()
+                    self.demo_mode = True
+                    self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(self.demo_frame, "Camera not available", (180, 240), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                    return
+                    
             time.sleep(1)  # Give camera time to initialize
     
     def _process_frame(self, frame, config):
@@ -167,10 +193,17 @@ class ObjectDetector:
             self._ensure_camera_open()
             
             while True:
-                success, frame = self.cap.read()
-                if not success:
-                    self._ensure_camera_open()
-                    continue
+                # Check if we're in demo mode
+                if hasattr(self, 'demo_mode') and self.demo_mode:
+                    # Use the demo frame instead of reading from camera
+                    frame = self.demo_frame.copy()
+                    success = True
+                else:
+                    # Normal camera operation
+                    success, frame = self.cap.read()
+                    if not success:
+                        self._ensure_camera_open()
+                        continue
                 
                 # Process the frame
                 processed_frame, _ = self._process_frame(frame, config)
@@ -184,6 +217,10 @@ class ObjectDetector:
                 yield (b'--frame\r\n'
                       b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
                 
+                # If in demo mode, add a small delay to simulate video
+                if hasattr(self, 'demo_mode') and self.demo_mode:
+                    time.sleep(0.1)
+                
         except Exception as e:
             print(f"Error in generate_frames: {e}")
             if self.cap is not None:
@@ -193,4 +230,4 @@ class ObjectDetector:
     def release(self):
         """Release camera resources"""
         if self.cap is not None and self.cap.isOpened():
-            self.cap.release() 
+            self.cap.release()

@@ -52,12 +52,29 @@ Pinaka-AI is a production-ready, minimal, and clear object detection system usin
   python training/scripts/master_script.py --quick
   ```
 
-### 2. Running the Web App
+### 2. Running the Web App Locally
 - Start the Flask server:
   ```bash
   python app.py
   ```
 - Open your browser at [http://localhost:5000](http://localhost:5000)
+
+### 3. Deployment on Render
+- This project is configured for deployment on Render.com
+- Files for deployment:
+  - `Procfile`: Specifies the command to run the application
+  - `runtime.txt`: Specifies the Python version
+  - `render.yaml`: Configuration for Render deployment
+  - `wsgi.py`: Entry point for gunicorn
+
+- To deploy on Render:
+  1. Push this repository to GitHub
+  2. Create a new Web Service on Render
+  3. Connect your GitHub repository
+  4. Render will automatically detect the configuration
+  5. Click "Create Web Service"
+
+- Note: The deployed version will run in demo mode without camera access, as web servers don't have access to physical cameras. For full functionality with camera access, run the application locally.
 
 ## Notes
 - Place your YOLO model weights in the `models/` directory.
