@@ -12,11 +12,9 @@ import random
 IS_PRODUCTION = os.environ.get('RENDER', False)
 
 class ObjectDetector:
-    def __init__(self, model_path="yolov8n.pt", camera_id=0, socketio=None, use_fallback=False):
+    def __init__(self, model_path="yolov8n.pt", socketio=None, use_fallback=False):
         self.model_loaded = False
         self.socketio = socketio
-        self.camera_id = camera_id
-        self.cap = None
         self.demo_mode = IS_PRODUCTION
         self.last_notification_time = {}  # For tracking notification cooldowns
         self.yolo_available = False
@@ -33,6 +31,7 @@ class ObjectDetector:
         if use_fallback:
             print("Using fallback detection mode")
             return
+            
         try:
             # Try importing YOLO if not already imported
             try:
@@ -89,8 +88,7 @@ class ObjectDetector:
             
             # Update demo frame with error message
             self._create_demo_frame(f"Error: {str(e)[:50]}", False)
-    
-    def _create_demo_frame(self, message="Demo Mode - No Camera", success=True):
+      def _create_demo_frame(self, message="Demo Mode - Browser Camera", success=True):
         """Create a demo frame with simulated detections for deployment"""
         # Create a base frame (black background)
         self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -123,41 +121,11 @@ class ObjectDetector:
             
             # Randomly select an object and color
             obj = random.choice(objects)
-            color = random.choice(colors)
-            
-            # Draw the bounding box and label
+            color = random.choice(colors)                # Draw the bounding box and label
             cv2.rectangle(self.demo_frame, (x, y), (x+w, y+h), color, 2)
             conf = random.uniform(0.5, 0.95)
             cv2.putText(self.demo_frame, f"{obj} {conf:.2f}", 
                        (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-    
-    def _ensure_camera_open(self):
-        """Ensure the camera is open, or use demo mode if in production"""
-        # In production, always use demo mode
-        if IS_PRODUCTION:
-            self.demo_mode = True
-            # Update the demo frame to simulate changing video
-            self._create_demo_frame()
-            return
-            
-        # If cap is None or not opened, try to open it
-        if self.cap is None or not self.cap.isOpened():
-            # In development, try to access camera
-            for device_id in [1, 2, 0]:  # Try different camera devices
-                self.cap = cv2.VideoCapture(device_id)
-                if self.cap.isOpened():
-                    print(f"Successfully opened camera device {device_id}")
-                    self.demo_mode = False
-                    break
-                self.cap.release()
-            
-            if not self.cap.isOpened():
-                print("Could not open any camera device. Using demo mode.")
-                self.cap = cv2.VideoCapture()
-                self.demo_mode = True
-                self._create_demo_frame("Camera not available")
-                
-            time.sleep(0.5)  # Give camera time to initialize
     
     def _process_frame(self, frame, config):
         """Process a single frame with detection"""
@@ -189,7 +157,7 @@ class ObjectDetector:
             
             return self.demo_frame, objects
         
-        # Regular model-based detection (only in development)
+        # Regular model-based detection
         if self.model_loaded:
             # Perform object detection with YOLO
             results = self.model(frame)
@@ -317,8 +285,7 @@ class ObjectDetector:
                 return
                 
             # Convert to base64
-            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
-              # Send the notification
+            jpg_as_text = base64.b64encode(buffer).decode('utf-8')            # Send the notification
             self.socketio.emit('detection_alert', {
                 'object': label,
                 'confidence': float(confidence),
@@ -327,48 +294,3 @@ class ObjectDetector:
             })
         except Exception as e:
             print(f"Error sending notification: {e}")
-    
-    def generate_frames(self, config):
-        """Generator function to yield processed frames for streaming"""
-        try:
-            self._ensure_camera_open()
-            
-            while True:
-                # Check if we're in demo mode
-                if hasattr(self, 'demo_mode') and self.demo_mode:
-                    # Use the demo frame instead of reading from camera
-                    frame = self.demo_frame.copy()
-                    success = True
-                else:
-                    # Normal camera operation
-                    success, frame = self.cap.read()
-                    if not success:
-                        self._ensure_camera_open()
-                        continue
-                
-                # Process the frame
-                processed_frame, _ = self._process_frame(frame, config)
-                
-                # Encode the frame for web streaming
-                ret, buffer = cv2.imencode('.jpg', processed_frame)
-                if not ret:
-                    continue
-                    
-                # Yield the frame in the format expected by Flask
-                yield (b'--frame\r\n'
-                      b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-                
-                # If in demo mode, add a small delay to simulate video
-                if hasattr(self, 'demo_mode') and self.demo_mode:
-                    time.sleep(0.1)
-                
-        except Exception as e:
-            print(f"Error in generate_frames: {e}")
-            if self.cap is not None:
-                self.cap.release()
-            self.cap = None
-            
-    def release(self):
-        """Release camera resources"""
-        if self.cap is not None and self.cap.isOpened():
-            self.cap.release()

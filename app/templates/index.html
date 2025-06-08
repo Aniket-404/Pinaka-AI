@@ -204,7 +204,7 @@
     <div class="col-lg-8">
         <div class="video-section">
             <div class="video-container">
-                <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Live detection feed">
+                <!-- Browser-based camera will be inserted here by JavaScript -->
                 <div class="video-overlay">
                     <h5 class="mb-0">Live Detection Feed</h5>
                     <small>Monitoring for objects in real-time</small>
@@ -281,6 +281,7 @@
 
 {% block scripts %}
 <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/browser-camera.js') }}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // Request notification permission

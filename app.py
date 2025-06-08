@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, redirect, url_for, flash, Response, jsonify
+from flask import Flask, render_template, redirect, url_for, flash, Response, jsonify, request
 from flask_socketio import SocketIO
 from app.forms import NotificationForm
 from app.utils.config import Config
@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import cv2
 import time
 import traceback
+import base64
+import numpy as np
 
 # Load environment variables
 load_dotenv()
@@ -139,16 +141,23 @@ def index():
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     form = NotificationForm()
-    # Get available classes from both models
+    # Collect available classes from both models
     available_classes = set()
-    if custom_detector and custom_detector.model_loaded and hasattr(custom_detector.model, 'names'):
-        available_classes.update(list(custom_detector.model.names.values()))
-    if coco_detector and coco_detector.model_loaded and hasattr(coco_detector.model, 'names'):
-        available_classes.update(list(coco_detector.model.names.values()))
-    if "Movement" not in available_classes:
-        available_classes.add("Movement")
+    # Try to get from custom model
+    if custom_detector and hasattr(custom_detector, 'model_loaded') and custom_detector.model_loaded:
+        if hasattr(custom_detector, 'model') and hasattr(custom_detector.model, 'names'):
+            available_classes.update(list(custom_detector.model.names.values()))
+    # Try to get from coco model
+    if coco_detector and hasattr(coco_detector, 'model_loaded') and coco_detector.model_loaded:
+        if hasattr(coco_detector, 'model') and hasattr(coco_detector.model, 'names'):
+            available_classes.update(list(coco_detector.model.names.values()))
+    # Always add Movement and custom classes
+    available_classes.add("Movement")
     for custom_class in ["stone", "gas_cylinder"]:
         available_classes.add(custom_class)
+    # Fallback: if still empty, provide a default set
+    if not available_classes:
+        available_classes = set(["person", "car", "dog", "cat", "Movement", "stone", "gas_cylinder"])
     available_classes = sorted(available_classes)
 
     if form.validate_on_submit():
@@ -163,57 +172,31 @@ def settings():
         form.selected_model.data = config.selected_model
     return render_template('settings.html', form=form, available_classes=available_classes)
 
-@app.route('/video_feed')
-def video_feed():
-    # Check if we're in a production environment (like Render)
-    is_production = os.environ.get('RENDER', False)
-    
-    def generate_frames():
-        while True:
-            frame = None
-            ret = False
-            # Prefer custom detector for camera/demo frame
-            if custom_detector:
-                custom_detector._ensure_camera_open()
-                if hasattr(custom_detector, 'demo_mode') and custom_detector.demo_mode:
-                    frame = custom_detector.demo_frame.copy()
-                    ret = True
-                else:
-                    ret, frame = custom_detector.cap.read()
-            elif coco_detector:
-                coco_detector._ensure_camera_open()
-                if hasattr(coco_detector, 'demo_mode') and coco_detector.demo_mode:
-                    frame = coco_detector.demo_frame.copy()
-                    ret = True
-                else:
-                    ret, frame = coco_detector.cap.read()
-            else:
-                break
-            if not ret or frame is None:
-                break
-            # Always run both detectors
-            frame_custom, detected_custom = (frame.copy(), [])
-            frame_coco, detected_coco = (frame.copy(), [])
-            if custom_detector and custom_detector.model_loaded:
-                frame_custom, detected_custom = custom_detector._process_frame(frame.copy(), config)
-            if coco_detector and coco_detector.model_loaded:
-                frame_coco, detected_coco = coco_detector._process_frame(frame.copy(), config)
-            # Merge detections (simple concat, or you can deduplicate if needed)
-            all_detections = detected_custom + detected_coco
-            # For display: overlay custom detections if any, else coco, else original
-            if detected_custom:
-                out_frame = frame_custom
-            elif detected_coco:
-                out_frame = frame_coco
-            else:
-                out_frame = frame
-            ret, buffer = cv2.imencode('.jpg', out_frame)
-            if not ret:
-                continue
-            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-            if is_production or (hasattr(custom_detector, 'demo_mode') and custom_detector.demo_mode):
-                time.sleep(0.1)
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/detect_frame', methods=['POST'])
+def detect_frame():
+    """Endpoint to receive a frame from the browser, run detection, and return results."""
+    data = request.get_json()
+    if not data or 'image' not in data:
+        return jsonify({'error': 'No image data provided'}), 400
+    try:
+        # Decode base64 image
+        img_data = base64.b64decode(data['image'])
+        np_arr = np.frombuffer(img_data, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({'error': 'Invalid image data'}), 400
+        # Run both detectors
+        results = []
+        if custom_detector and custom_detector.model_loaded:
+            _, detected_custom = custom_detector._process_frame(frame.copy(), config)
+            results.extend([{'label': label, 'confidence': float(conf)} for label, conf in detected_custom])
+        if coco_detector and coco_detector.model_loaded:
+            _, detected_coco = coco_detector._process_frame(frame.copy(), config)
+            results.extend([{'label': label, 'confidence': float(conf)} for label, conf in detected_coco])
+        return jsonify({'detections': results})
+    except Exception as e:
+        print(f"Error in detect_frame: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @socketio.on('connect')
 def handle_connect():
