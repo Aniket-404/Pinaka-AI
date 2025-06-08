@@ -54,12 +54,7 @@ try:
     # Get app and socketio from the loaded module
     app = app_module.app
     socketio = app_module.socketio
-    
-    # Configure app for port binding (Render requires this)
-    @app.route('/health')
-    def health_check():
-        return "OK", 200
-    
+    # Do NOT define /health here; it is defined in app.py
     print("Application loaded successfully")
 except Exception as e:
     print(f"Error loading application: {e}")
