@@ -220,10 +220,17 @@
     </div>
     
     <div class="col-lg-4">
-        <div class="card">
-            <div class="clear-notifications d-flex justify-content-between align-items-center">
+        <div class="card">            <div class="clear-notifications d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Detection Notifications</h5>
-                <button id="clear-notifications" class="btn btn-sm btn-outline-primary">Clear All</button>
+                <div>
+                    <button id="toggle-sms" class="btn btn-sm btn-outline-secondary me-2" title="Toggle SMS notifications">
+                        <i class="bi bi-phone"></i> SMS
+                    </button>
+                    <button id="clear-notifications" class="btn btn-sm btn-outline-primary">Clear All</button>
+                </div>
+            </div>
+            <div id="sms-status" class="text-center p-2" style="display: none; background-color: #e6f7ff; border-bottom: 1px solid #bae7ff;">
+                <small><i class="bi bi-phone"></i> SMS notifications are active</small>
             </div>
             <div class="notifications-section">
                 <div id="no-notifications" class="no-notifications">
@@ -299,7 +306,8 @@
         const socket = io();
         
         // Handle detection alerts
-        socket.on('detection_alert', function(data) {            // Create browser notification if permission granted
+        socket.on('detection_alert', function(data) {
+            // Create browser notification if permission granted
             if ('Notification' in window && Notification.permission === 'granted') {
                 // Prepare notification body with coordinates if available
                 let notificationBody = `Confidence: ${(data.confidence * 100).toFixed(1)}% at ${data.time || 'Now'}`;
@@ -326,53 +334,271 @@
             document.getElementById('no-notifications').style.display = 'block';
         });
         
-        // Function to add a notification to the panel
+        // Helper function to show toast notifications
+        function showToast(message, type = 'info') {
+            // Create toast container if it doesn't exist
+            let toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                document.body.appendChild(toastContainer);
+            }
+            
+            // Create the toast
+            const toastId = 'toast-' + Date.now();
+            const toastHTML = `
+                <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="toast-header ${type === 'error' ? 'bg-danger text-white' : ''}">
+                        <strong class="me-auto">${type === 'error' ? 'Error' : 'Notification'}</strong>
+                        <small>just now</small>
+                        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                </div>
+            `;
+            
+            // Add toast to container
+            toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+            
+            // Initialize and show the toast
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+            toast.show();
+            
+            // Remove toast from DOM after it's hidden
+            toastElement.addEventListener('hidden.bs.toast', function() {
+                toastElement.remove();
+            });
+        }
+        
+        // Set up SMS toggle button
+        const toggleSmsButton = document.getElementById('toggle-sms');
+        if (toggleSmsButton) {
+            toggleSmsButton.addEventListener('click', function() {
+                // Get current SMS status
+                fetch('/api/sms_status')
+                    .then(response => response.json())
+                    .then(data => {
+                        // Toggle to opposite state
+                        const newState = !data.sms_enabled;
+                        
+                        // Update the server
+                        fetch('/api/toggle_sms', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ enabled: newState })
+                        })
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.success) {
+                                // Update UI
+                                const smsStatusElement = document.getElementById('sms-status');
+                                if (smsStatusElement) {
+                                    if (result.sms_enabled) {
+                                        smsStatusElement.style.display = 'block';
+                                        toggleSmsButton.classList.remove('btn-outline-secondary');
+                                        toggleSmsButton.classList.add('btn-secondary');
+                                        // Show toast notification
+                                        showToast('SMS notifications enabled');
+                                    } else {
+                                        smsStatusElement.style.display = 'none';
+                                        toggleSmsButton.classList.remove('btn-secondary');
+                                        toggleSmsButton.classList.add('btn-outline-secondary');
+                                        // Show toast notification
+                                        showToast('SMS notifications disabled');
+                                    }
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error toggling SMS:', error);
+                            showToast('Error toggling SMS notifications', 'error');
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error checking SMS status:', error);
+                    });
+            });
+            
+            // Initialize SMS toggle button state
+            fetch('/api/sms_status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.sms_enabled) {
+                        toggleSmsButton.classList.remove('btn-outline-secondary');
+                        toggleSmsButton.classList.add('btn-secondary');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error initializing SMS button:', error);
+                });
+        }
+        
+        /**
+         * Add a detection notification to the notifications panel
+         */
         function addNotificationToPanel(data) {
             const notificationsContainer = document.getElementById('notifications-container');
             const noNotifications = document.getElementById('no-notifications');
             
-            // Hide the "no notifications" message
-            noNotifications.style.display = 'none';
-              // Create notification card
-            const card = document.createElement('div');
-            card.className = 'notification-card new';
-            
-            // Format coordinates if available
-            let coordsText = '';
-            if (data.coordinates) {
-                coordsText = `<div class="notification-coords">
-                    Location: (${data.coordinates.x1},${data.coordinates.y1}) to (${data.coordinates.x2},${data.coordinates.y2})
-                </div>`;
-            }
-            
-            card.innerHTML = `
-                <div class="notification-header">
-                    <span class="notification-title">${data.object}</span>
-                    <span class="notification-time">${data.time || 'Now'}</span>
-                </div>
-                <img src="data:image/jpeg;base64,${data.image}" class="notification-image" alt="${data.object}">
-                ${coordsText}
-                <div class="text-end">
-                    <span class="notification-confidence">${(data.confidence * 100).toFixed(1)}% confidence</span>
-                </div>
-            `;
-            
-            // Add to the container at the top
-            notificationsContainer.prepend(card);
-            
-            // Remove the "new" class after animation completes
-            setTimeout(() => {
-                card.classList.remove('new');
-            }, 2000);
-            
-            // Limit the number of notifications to 50
-            const cards = notificationsContainer.querySelectorAll('.notification-card');
-            if (cards.length > 50) {
-                for (let i = 50; i < cards.length; i++) {
-                    cards[i].remove();
+            if (notificationsContainer) {
+                // Hide "no notifications" message
+                if (noNotifications) {
+                    noNotifications.style.display = 'none';
+                }
+                
+                // Format time if available
+                const timeText = data.time || new Date().toLocaleTimeString();
+                
+                // Format coordinates if available
+                let coordsText = '';
+                if (data.coordinates) {
+                    coordsText = `<div class="notification-coords">
+                        Location: (${data.coordinates.x1},${data.coordinates.y1}) to (${data.coordinates.x2},${data.coordinates.y2})
+                    </div>`;
+                }
+                
+                // Create notification card HTML
+                const cardHTML = `
+                    <div class="notification-card new">
+                        <div class="notification-header">
+                            <div class="notification-title">${data.object}</div>
+                            <div class="notification-time">${timeText}</div>
+                        </div>
+                        <img src="data:image/jpeg;base64,${data.image}" class="notification-image" alt="${data.object} detected">
+                        ${coordsText}
+                        <div class="notification-confidence">Confidence: ${(data.confidence * 100).toFixed(1)}%</div>
+                    </div>
+                `;
+                
+                // Add to container
+                notificationsContainer.insertAdjacentHTML('afterbegin', cardHTML);
+                
+                // Get the newly added card
+                const newCard = notificationsContainer.querySelector('.notification-card.new');
+                
+                // Remove highlight after animation
+                setTimeout(() => {
+                    if (newCard) newCard.classList.remove('new');
+                }, 2000);
+                
+                // Limit to 50 notifications to prevent memory issues
+                const cards = notificationsContainer.querySelectorAll('.notification-card');
+                if (cards.length > 50) {
+                    for (let i = 50; i < cards.length; i++) {
+                        cards[i].remove();
+                    }
                 }
             }
         }
     });
 </script>
 {% endblock %}
+                            },
+                            body: JSON.stringify({ enabled: newState })
+                        })
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.success) {
+                                // Update UI
+                                const smsStatusElement = document.getElementById('sms-status');
+                                if (smsStatusElement) {
+                                    if (result.sms_enabled) {
+                                        smsStatusElement.style.display = 'block';
+                                        toggleSmsButton.classList.remove('btn-outline-secondary');
+                                        toggleSmsButton.classList.add('btn-secondary');
+                                        // Show toast notification
+                                        showToast('SMS notifications enabled');
+                                    } else {
+                                        smsStatusElement.style.display = 'none';
+                                        toggleSmsButton.classList.remove('btn-secondary');
+                                        toggleSmsButton.classList.add('btn-outline-secondary');
+                                        // Show toast notification
+                                        showToast('SMS notifications disabled');
+                                    }
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error toggling SMS:', error);
+                            showToast('Error toggling SMS notifications', 'error');
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error checking SMS status:', error);
+                    });
+            });
+        }
+          // Initialize SMS toggle button state
+        fetch('/api/sms_status')
+            .then(response => response.json())
+            .then(data => {
+                if (toggleSmsButton && data.sms_enabled) {
+                    toggleSmsButton.classList.remove('btn-outline-secondary');
+                    toggleSmsButton.classList.add('btn-secondary');
+                }
+            })
+            .catch(error => {
+                console.error('Error initializing SMS button:', error);
+            });
+
+        // Helper function to show toast notifications
+        function showToast(message, type = 'info') {
+            // Create toast container if it doesn't exist
+            let toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                document.body.appendChild(toastContainer);
+            }
+            
+            // Create the toast
+            const toastId = 'toast-' + Date.now();
+            const toastHTML = `
+                <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="toast-header ${type === 'error' ? 'bg-danger text-white' : ''}">
+                        <strong class="me-auto">${type === 'error' ? 'Error' : 'Notification'}</strong>
+                        <small>just now</small>
+                        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                </div>
+            `;
+            
+            // Add toast to container
+            toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+            
+            // Initialize and show the toast
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+            toast.show();
+            
+            // Remove toast from DOM after it's hidden
+            toastElement.addEventListener('hidden.bs.toast', function() {
+                toastElement.remove();
+            });
+        }
+        
+        // Set up SMS toggle button
+        const toggleSmsButton = document.getElementById('toggle-sms');
+        if (toggleSmsButton) {
+            toggleSmsButton.addEventListener('click', function() {
+                // Get current SMS status
+                fetch('/api/sms_status')
+                    .then(response => response.json())
+                    .then(data => {
+                        // Toggle to opposite state
+                        const newState = !data.sms_enabled;
+                        
+                        // Update the server
+                        fetch('/api/toggle_sms', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                           

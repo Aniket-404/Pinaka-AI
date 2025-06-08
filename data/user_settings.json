@@ -1,0 +1,29 @@
+{
+    "monitored_objects": [
+        "person",
+        "bicycle",
+        "car",
+        "motorcycle",
+        "bus",
+        "truck",
+        "dog",
+        "cat",
+        "chair",
+        "bottle",
+        "laptop",
+        "cell phone",
+        "Movement",
+        "stone",
+        "gas_cylinder"
+    ],
+    "notification_threshold": 0.7,
+    "notification_cooldown": 10,
+    "sms_enabled": true,
+    "sms_cooldown": 10,
+    "sms_objects": [
+        "person",
+        "car",
+        "stone",
+        "gas_cylinder"
+    ]
+}

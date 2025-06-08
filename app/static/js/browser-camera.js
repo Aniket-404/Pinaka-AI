@@ -44,6 +44,12 @@ document.addEventListener('DOMContentLoaded', function() {
     setupElements();
     setupEventListeners();
     setupSocketConnection();
+    
+    // Check SMS notification status on page load
+    checkSmsStatus();
+    
+    // Set up interval to periodically check SMS status
+    setInterval(checkSmsStatus, 60000); // Check every minute
 });
 
 /**
@@ -439,4 +445,25 @@ function setupSocketConnection() {
             console.log('Disconnected from Socket.IO server');
         });
     }
+}
+
+/**
+ * Check SMS notification status
+ */
+function checkSmsStatus() {
+    fetch('/api/sms_status')
+        .then(response => response.json())
+        .then(data => {
+            const smsStatusElement = document.getElementById('sms-status');
+            if (smsStatusElement) {
+                if (data.sms_enabled) {
+                    smsStatusElement.style.display = 'block';
+                } else {
+                    smsStatusElement.style.display = 'none';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error checking SMS status:', error);
+        });
 }

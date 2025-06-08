@@ -338,8 +338,7 @@ class ObjectDetector:
                 'coordinates': {'x1': int(x1), 'y1': int(y1), 'x2': int(x2), 'y2': int(y2)},
                 'image': jpg_as_text
             })
-            
-            # Send SMS notification if enabled and object is in the SMS list
+              # Send SMS notification if enabled and object is in the SMS list
             if hasattr(config, 'sms_enabled') and config.sms_enabled:
                 if label in config.sms_objects:
                     # Check SMS-specific cooldown
@@ -350,6 +349,7 @@ class ObjectDetector:
                             confidence=confidence,
                             coordinates=(x1, y1, x2, y2)
                         )
+                        print(f"SMS notification sent for {label}")
                         
         except Exception as e:
             print(f"Error sending notification: {e}")

@@ -210,8 +210,7 @@ def settings():
     all_classes = set()
     for class_group in available_classes.values():
         all_classes.update(class_group)
-    
-    # Fallback: if still empty, provide a default set
+      # Fallback: if still empty, provide a default set
     if not all_classes:
         all_classes = set(["person", "car", "dog", "cat", "Movement", "stone", "gas_cylinder"])
     
@@ -227,6 +226,9 @@ def settings():
         if form.sms_objects.data:
             config.sms_objects = [c.strip() for c in form.sms_objects.data.split(',') if c.strip()]
         config.sms_cooldown = form.sms_cooldown.data
+        
+        # Save the settings to make them persistent
+        config.save_settings()
         
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('index'))
@@ -360,6 +362,32 @@ def handle_connect():
 @socketio.on('disconnect')
 def handle_disconnect():
     print('Client disconnected')
+
+@app.route('/api/sms_status')
+def sms_status():
+    """API endpoint to check SMS notification status"""
+    return jsonify({
+        'sms_enabled': config.sms_enabled,
+        'sms_objects': config.sms_objects,
+        'sms_cooldown': config.sms_cooldown
+    })
+
+@app.route('/api/toggle_sms', methods=['POST'])
+def toggle_sms():
+    """API endpoint to toggle SMS notifications on/off"""
+    data = request.get_json()
+    if data and 'enabled' in data:
+        config.sms_enabled = bool(data['enabled'])
+        # Save the setting
+        config.save_settings()
+        return jsonify({
+            'success': True,
+            'sms_enabled': config.sms_enabled
+        })
+    return jsonify({
+        'success': False,
+        'error': 'Invalid request'
+    }), 400
 
 if __name__ == '__main__':
     # Use this for local development
