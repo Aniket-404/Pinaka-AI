@@ -39,7 +39,6 @@ ENV/
 *.log
 
 # Model files (will be tracked by Git LFS)
-*.pt
 *.pth
 *.onnx
 *.h5
