@@ -31,44 +31,29 @@ def setup_environment():
     if not os.path.exists(os.environ['YOLO_CONFIG_DIR']):
         os.makedirs(os.environ['YOLO_CONFIG_DIR'], exist_ok=True)
         print(f"Created directory: {os.environ['YOLO_CONFIG_DIR']}")
-    
-    # Create a models directory in /tmp if it doesn't exist
+      # Create a models directory in /tmp if it doesn't exist
     tmp_models_dir = '/tmp/models'
     if not os.path.exists(tmp_models_dir):
         os.makedirs(tmp_models_dir, exist_ok=True)
         print(f"Created directory: {tmp_models_dir}")
-        
-    # Check for models and download if needed
-    model_paths = {
-        'yolov8n.pt': 'https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt'
-    }
     
-    for model_name, url in model_paths.items():
+    # Check for models but don't download - we assume models are included in the deployment
+    model_files = ['yolov8n.pt', 'custom_yolo_100epochs_best.pt']
+    
+    for model_name in model_files:
         local_path = os.path.join('models', model_name)
         tmp_path = os.path.join(tmp_models_dir, model_name)
         
-        # If model doesn't exist in the local models directory but exists in tmp, copy it
-        if not os.path.exists(local_path) and os.path.exists(tmp_path):
+        # If model exists in the local models directory, copy it to tmp
+        if os.path.exists(local_path):
             try:
-                shutil.copy2(tmp_path, local_path)
-                print(f"Copied {model_name} from {tmp_path} to {local_path}")
+                shutil.copy2(local_path, tmp_path)
+                print(f"Copied {model_name} from {local_path} to {tmp_path}")
             except Exception as e:
                 print(f"Error copying model {model_name}: {e}")
-                
-        # If model doesn't exist anywhere, download it
-        if not os.path.exists(local_path):
-            try:
-                print(f"Downloading {model_name} from {url}...")
-                # Ensure the models directory exists
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                urllib.request.urlretrieve(url, local_path)
-                print(f"Successfully downloaded {model_name}")
-                
-                # Also save a copy to tmp directory
-                shutil.copy2(local_path, tmp_path)
-                print(f"Saved a copy to {tmp_path}")
-            except Exception as e:
-                print(f"Error downloading model {model_name}: {e}")
+        else:
+            print(f"WARNING: Model {model_name} not found in {local_path}")
+            print(f"The application will use fallback mode if the model is required")
     
     # Make sure the script directory is in the Python path
     script_dir = os.path.dirname(os.path.abspath(__file__))

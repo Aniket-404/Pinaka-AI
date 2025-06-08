@@ -37,11 +37,20 @@ is_production = os.environ.get('RENDER', False)
 
 # Only import the ObjectDetector class after setting environment variables
 from app.utils.object_detector import ObjectDetector
+import pathlib
 
-# Model paths
-custom_model_path = "models/custom_yolo_100epochs_best.pt"
+# Get absolute path to the models directory
+base_dir = os.path.abspath(os.path.dirname(__file__))
+models_dir = os.path.join(base_dir, "models")
+
+# Model paths (using absolute paths)
+custom_model_path = os.path.join(models_dir, "custom_yolo_100epochs_best.pt")
 custom_model_drive_url = "https://drive.google.com/file/d/1a5URsD5oIkujCwpmUaGUd_6HTSswdcwZ/view?usp=sharing"
-coco_model_path = "models/yolov8n.pt"
+coco_model_path = os.path.join(models_dir, "yolov8n.pt")
+
+# Print model paths for debugging
+print(f"Custom model path: {custom_model_path}")
+print(f"COCO model path: {coco_model_path}")
 
 # Initialize detectors
 custom_detector = None
@@ -92,14 +101,20 @@ def initialize_model(model_path, name="model", max_retries=2, retry_delay=2):
     print(f"All attempts to load {name} failed, using fallback")
     return ObjectDetector(use_fallback=True)
 
-# Download the custom model if not present
+# Verify that model files exist before loading
 if not os.path.exists(custom_model_path):
-    print(f"Custom model not found at {custom_model_path}. Downloading from Google Drive...")
-    download_file_from_google_drive(custom_model_drive_url, custom_model_path)
+    print(f"WARNING: Custom model not found at {custom_model_path}. Will use fallback mode.")
+    custom_detector = ObjectDetector(use_fallback=True)
+else:
+    # Load custom model
+    custom_detector = initialize_model(custom_model_path, "custom model")
 
-# Always try to load the actual models with retry logic
-custom_detector = initialize_model(custom_model_path, "custom model")
-coco_detector = initialize_model(coco_model_path, "COCO model")
+if not os.path.exists(coco_model_path):
+    print(f"WARNING: COCO model not found at {coco_model_path}. Will use fallback mode.")
+    coco_detector = ObjectDetector(use_fallback=True)
+else:
+    # Load COCO model
+    coco_detector = initialize_model(coco_model_path, "COCO model")
 
 # Config for detection settings
 config = Config()

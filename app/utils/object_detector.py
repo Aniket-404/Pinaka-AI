@@ -38,12 +38,10 @@ class ObjectDetector:
             except Exception as e:
                 print(f"Error importing YOLO: {e}")
                 self.yolo_available = False
-            
-            # Model loading (only in development mode)
+              # Model loading (only in development mode)
             model_locations = [
-                model_path,  # Original path
-                os.path.join('models', os.path.basename(model_path)),  # models directory
-                os.path.join('/tmp/models', os.path.basename(model_path))  # tmp models directory
+                model_path,  # Original path (should be absolute)
+                os.path.join('models', os.path.basename(model_path)),  # models directory relative
             ]
             
             model_found = False
@@ -63,11 +61,32 @@ class ObjectDetector:
             if not self.yolo_available:
                 print("YOLO is not available, cannot load model")
                 raise ImportError("YOLO is not available in the current environment")
-            
-            # Load the model
+              # Load the model
             print(f"Loading model from: {model_path}")
-            self.model = YOLO(model_path)
-            self.model_loaded = True
+            try:
+                # First try standard loading method
+                self.model = YOLO(model_path)
+                self.model_loaded = True
+                print("Model loaded successfully using standard method")
+            except Exception as e:
+                print(f"Error in standard model loading: {e}")
+                
+                # If we get "invalid load key, 'v'" error, try an alternative approach
+                if "invalid load key" in str(e):
+                    print("Detected 'invalid load key' error, trying alternative loading method...")
+                    try:
+                        # Try loading with explicit task parameter
+                        self.model = YOLO(model_path, task='detect')
+                        self.model_loaded = True
+                        print("Model loaded successfully using alternative method")
+                    except Exception as alt_e:
+                        print(f"Alternative loading also failed: {alt_e}")
+                        self.model_loaded = False
+                        self.demo_mode = True
+                else:
+                    # For other errors, just fall back to demo mode
+                    self.model_loaded = False
+                    self.demo_mode = True
             
             # Print available classes for this model
             if hasattr(self.model, 'names'):
