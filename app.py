@@ -6,6 +6,7 @@ from app.utils.object_detector import ObjectDetector
 from app.utils.config import Config
 from dotenv import load_dotenv
 import cv2
+import time
 
 # Load environment variables
 load_dotenv()
