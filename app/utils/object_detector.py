@@ -6,7 +6,15 @@ import os
 import sys
 import urllib.request
 import numpy as np
-from ultralytics import YOLO
+import shutil
+
+# Try importing YOLO, but have a fallback if it fails
+try:
+    from ultralytics import YOLO
+    YOLO_AVAILABLE = True
+except Exception as e:
+    print(f"Error importing YOLO: {e}")
+    YOLO_AVAILABLE = False
 
 class ObjectDetector:
     def __init__(self, model_path="yolov8n.pt", camera_id=0, socketio=None, use_fallback=False):
@@ -14,40 +22,97 @@ class ObjectDetector:
         self.socketio = socketio
         self.camera_id = camera_id
         self.cap = None
+        self.demo_mode = os.environ.get('RENDER', False)
+        self.demo_frame = None
         
-        if use_fallback:
+        # Initialize demo frame
+        self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(self.demo_frame, "Initializing object detection...", (50, 240), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        if use_fallback or not YOLO_AVAILABLE:
             print("Using fallback motion detection mode")
             return
             
         try:
-            # Check if model exists, if not and it's yolov8n.pt, download it manually
-            if model_path == "yolov8n.pt" and not os.path.exists(model_path):
-                print(f"Model {model_path} not found. Attempting to download manually...")
+            # Check if model exists, if not, try multiple locations and download if needed
+            model_locations = [
+                model_path,  # Original path
+                os.path.join('models', os.path.basename(model_path)),  # models directory
+                os.path.join('/tmp/models', os.path.basename(model_path))  # tmp models directory
+            ]
+            
+            model_found = False
+            for location in model_locations:
+                if os.path.exists(location):
+                    print(f"Found model at: {location}")
+                    model_path = location
+                    model_found = True
+                    break
+            
+            if not model_found and os.path.basename(model_path) == "yolov8n.pt":
+                print(f"Model not found. Attempting to download manually...")
                 try:
+                    # Make sure the models directory exists
+                    os.makedirs('models', exist_ok=True)
+                    
                     # Manual download with urllib
                     url = "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"
                     print(f"Downloading from {url}...")
-                    urllib.request.urlretrieve(url, model_path)
-                    print(f"Successfully downloaded {model_path}")
+                    download_path = os.path.join('models', 'yolov8n.pt')
+                    urllib.request.urlretrieve(url, download_path)
+                    print(f"Successfully downloaded to {download_path}")
+                    
+                    # Also save a copy to tmp
+                    tmp_path = os.path.join('/tmp/models', 'yolov8n.pt')
+                    os.makedirs('/tmp/models', exist_ok=True)
+                    shutil.copy2(download_path, tmp_path)
+                    print(f"Saved a copy to {tmp_path}")
+                    
+                    model_path = download_path
+                    model_found = True
                 except Exception as e:
                     print(f"Failed to download model: {e}")
-                    print("Please download YOLOv8n model manually from:")
-                    print("https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt")
-                    return
+                    print("Will use demo mode with placeholder detection")
+            
+            if not model_found:
+                print(f"Could not find or download model: {model_path}")
+                print("Will use demo mode with placeholder detection")
+                self.demo_mode = True
+                return
             
             # Load the model
+            print(f"Loading model from: {model_path}")
             self.model = YOLO(model_path)
             self.model_loaded = True
             
             # Print available classes for this model
             if hasattr(self.model, 'names'):
                 print(f"Model loaded with classes: {list(self.model.names.values())}")
+                
+                # Update demo frame with success message
+                self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(self.demo_frame, "Model loaded successfully", (50, 200), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(self.demo_frame, f"Classes: {list(self.model.names.values())[:5]}...", (50, 240), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                cv2.putText(self.demo_frame, "Running in demo mode (no camera)", (50, 280), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             else:
                 print("Model loaded but class names not available")
                 
         except Exception as e:
             print(f"Error loading YOLO model: {e}")
             print("Will fall back to a simplified detection method")
+            
+            # Update demo frame with error message
+            self.demo_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(self.demo_frame, "Error loading model", (50, 200), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(self.demo_frame, str(e)[:50], (50, 240), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            cv2.putText(self.demo_frame, "Using simplified detection", (50, 280), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     
     def _ensure_camera_open(self):
         """Ensure the camera is open, attempt to reopen if closed"""

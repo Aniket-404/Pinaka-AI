@@ -19,6 +19,9 @@ if 'YOLO_CONFIG_DIR' not in os.environ:
 if not os.path.exists(os.environ['YOLO_CONFIG_DIR']):
     os.makedirs(os.environ['YOLO_CONFIG_DIR'], exist_ok=True)
 
+# Disable Ultralytics cache downloads
+os.environ['ULTRALYTICS_NO_CACHE'] = '1'
+
 # Create Flask app with correct template folder
 template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'app', 'templates'))
 static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'app', 'static'))
@@ -33,15 +36,24 @@ coco_model_path = "models/yolov8n.pt"
 custom_detector = None
 coco_detector = None
 
+# Check if we're in production environment
+is_production = os.environ.get('RENDER', False)
+
 try:
     print(f"Attempting to load custom model: {custom_model_path}")
     custom_detector = ObjectDetector(model_path=custom_model_path, socketio=socketio)
     if custom_detector.model_loaded:
         print(f"Custom model loaded with classes: {list(custom_detector.model.names.values())}")
     else:
-        print("Custom model failed to load.")
+        print("Custom model failed to load. Using demo mode.")
+        if is_production:
+            # In production, ensure we have a demo mode detector
+            custom_detector.demo_mode = True
 except Exception as e:
     print(f"Error loading custom model: {e}")
+    # Create a fallback detector in demo mode
+    custom_detector = ObjectDetector(use_fallback=True)
+    custom_detector.demo_mode = True
 
 try:
     print(f"Attempting to load COCO model: {coco_model_path}")
@@ -49,9 +61,15 @@ try:
     if coco_detector.model_loaded:
         print(f"COCO model loaded with classes: {list(coco_detector.model.names.values())}")
     else:
-        print("COCO model failed to load.")
+        print("COCO model failed to load. Using demo mode.")
+        if is_production:
+            # In production, ensure we have a demo mode detector
+            coco_detector.demo_mode = True
 except Exception as e:
     print(f"Error loading COCO model: {e}")
+    # Create a fallback detector in demo mode
+    coco_detector = ObjectDetector(use_fallback=True)
+    coco_detector.demo_mode = True
 
 # Config for detection settings
 config = Config()
