@@ -21,8 +21,6 @@
     "sms_enabled": true,
     "sms_cooldown": 10,
     "sms_objects": [
-        "person",
-        "car",
         "stone",
         "gas_cylinder"
     ]
